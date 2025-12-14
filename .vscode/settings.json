@@ -1,0 +1,21 @@
+{
+  "editor.defaultFormatter": "biomejs.biome",
+  "editor.formatOnSave": true,
+  "search.useIgnoreFiles": false,
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/*.log": true,
+    "**/.DS_Store": true,
+    "**/coverage": true,
+    "**/.vitest": true
+  },
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/*.log": true,
+    "**/.DS_Store": true,
+    "**/coverage": true,
+    "**/.vitest": true
+  }
+}

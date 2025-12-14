@@ -1,16 +1,29 @@
 # Clank
 
-Universal AI assistant configuration manager with overlay repository support.
+Store AI agent files and notes in a separate git repository. Git-ignored symlinks make the files visible in your projects.
 
-Clank manages AI assistant configuration files (CLAUDE.md, GEMINI.md, etc.) and related tooling across multiple projects and git worktrees through a centralized overlay repository with intelligent symlinking.
+- **`clank add`** to move files to the overlay.
+- **`clank link`** to connect overlay files to your project.
+- **`clank unlink`** to disconnect.
+- **`clank commit`** to commit changes in the overlay repository.
+- **`clank check`** to show overlay status and help realign overlay files when your project restructures.
+
+## Why a Separate Repository?
+
+Clank stores your AI agent files (CLAUDE.md, commands, notes) in a separate git repository 
+symlinks them into your project. This separation provides key advantages:
+
+- **Different Review Cadence**: Update agent instructions, commands, and notes without requiring the same review process as production code.
+- **Work on Repos You Don't Control**: Add agent context to open source projects or third-party codebases without forking or modifying.
+- **Persist Knowledge Across Forks**: Keep your agent context when working across multiple forks of the same project.
 
 ## Features
 
-- **Centralized Configuration**: Store all AI assistant configs in one overlay repository
-- **Git-Aware**: Automatically detects project and worktree/branch names
-- **Shared by Default, Isolated When Needed**: Commands shared across worktrees, task notes isolated per-worktree
-- **Multi-Variant Support**: Single source file, multiple symlinks (CLAUDE.md → GEMINI.md, copilot-instructions.md)
-- **Template System**: Automatically initialize new worktrees with template files
+- **Separate Tracking**: Agent files live in their own repository with independent version control.
+- **Multi-Agent Support**: Single source file, multiple symlinks (AGENTS.md, CLAUDE.md, GEMINI.md).
+- **Worktree-Aware**: Works seamlessly with git worktrees.
+- **Git Ignored**: Agent files are ignored in the main repo, tracked in the overlay repo.
+- **Three Scopes**: Global (all projects), Project (all branches), Worktree (this branch only).
 
 ## Installation
 
@@ -30,8 +43,8 @@ npx clank init
 
 ```bash
 clank init
-# Creates ~/clank-overlay with default structure
-# Creates ~/.clank.config.js
+# Creates ~/clankover with default structure
+# Creates ~/.config/clank/config.js
 ```
 
 ### 2. Link to Your Project
@@ -43,85 +56,72 @@ clank link
 # Creates symlinks from overlay to current directory
 ```
 
-### 3. Add New Files
+### 3. Add Files with `clank add`
+
+The `clank add` command moves files to the overlay and creates symlinks.
+Agent files (CLAUDE.md, AGENTS.md) stay in place; other files go in `clank/`.
+
+> You can run `clank add` from any subdirectory. Agent files and `clank/` folders work at any level in your project tree.
 
 ```bash
-# Add CLAUDE.md to root
+# Add to project scope (default) - shared across all branches
 clank add CLAUDE.md
 
-# Add architecture docs to shared .clank/
-clank add architecture.md
+# Add to global scope - shared across all projects
+clank add style.md --global
 
-# Add global command
-clank add .claude/commands/review.md
+# Add to worktree scope - this branch only
+clank add notes.md --worktree
 
-# Add project-specific command
-clank add .claude/commands/build.md --project
-```
+# Add commands
+clank add .claude/commands/review.md --global   # All projects
+clank add .claude/commands/build.md             # This project
 
-## Global Options
-
-### `--config <path>`
-
-Specify a custom config file location (useful for testing without modifying your home directory).
-
-**Example:**
-```bash
-clank --config /tmp/test-config.js init /tmp/test-overlay
-clank --config /tmp/test-config.js link
+# Add a directory (all files inside)
+clank add clank/
 ```
 
 ## Commands
 
 ### `clank init [overlay-path]`
 
-Initialize a new overlay repository. Creates:
-- Directory structure: `clank/{commands,agents,init}/`, `targets/`
-- Default template files in `init/`
-- Global config at `~/.clank.config.js`
+Run once to create the overlay repository (default: `~/clankover`) and config file.
 
-**Example:**
 ```bash
-clank init                      # Default: ~/clank-overlay
-clank init ~/my-clank-overlay   # Custom location
+clank init                      # Default: ~/clankover
+clank init ~/my-clankover       # Custom location
 ```
 
 ### `clank link [target]`
 
-Link overlay to target directory (current directory by default).
+Create symlinks from the overlay's agent files and notes into your project (current project by default).
 
-**What it does:**
-- Auto-detects project name from git remote/repository
-- Auto-detects branch/worktree name
-- Creates overlay structure if missing
-- Initializes worktree from templates if first time
-- Creates all symlinks
-- Merges global + project commands/agents
-- Creates variant symlinks (GEMINI.md, copilot-instructions.md)
-
-**Example:**
 ```bash
-clank link              # Link to current directory
-clank link ~/my-project # Link to specific directory
+clank link              # Link current project to clank
+clank link ~/my-project # Link to specific project
 ```
 
-### `clank add <file> [--project]`
+### `clank add <file> [options]`
 
-Add a new file to overlay and create symlink.
+Move a file to the overlay and replace it with a symlink.
+If the file doesn't exist, an empty file is created.
 
-**Resolution Rules:**
-- Known specials (claude.md, gemini.md) → root level
-- Paths with `.claude/` → commands/agents
-- Plain filenames → `.clank/` (shared docs)
-- `--project` flag → project-specific (not global)
+**Scope Options:**
+
+| Flag | Scope | Shared Across |
+|------|-------|---------------|
+| `--global` | Global | All projects |
+| `--project` | Project (default) | All branches in project |
+| `--worktree` | Worktree | This branch only |
 
 **Examples:**
 ```bash
-clank add gemini.md                       # Root-level variant
-clank add architecture.md                 # .clank/architecture.md (shared)
-clank add clank/notes.md                  # Same as above
-clank add .claude/commands/review.md      # Global command
-clank add .claude/commands/build.md -p    # Project-specific command
+clank add style.md                            # Project scope (default)
+clank add style.md --global                   # Global scope
+clank add notes.md --worktree                 # Worktree scope
+clank add .claude/commands/review.md --global # Global command
+clank add .claude/commands/build.md           # Project command (default)
+clank add CLAUDE.md                           # Creates agents.md + agent symlinks
 ```
 
 ### `clank unlink [target]`
@@ -134,76 +134,119 @@ clank unlink            # Unlink current directory
 clank unlink ~/my-project
 ```
 
-## Overlay Repository Structure
+### `clank commit [-m message]`
 
-```
-~/clank-overlay/
-├── clank/
-│   ├── commands/              # Global commands (all projects)
-│   ├── agents/                # Global agents
-│   └── init/                  # Template files for new worktrees
-│       ├── plan.md            # Contains {{worktree_message}}
-│       └── notes.md
-└── targets/
-    └── my-project/
-        ├── CLAUDE.md          # Root-level AI instructions
-        ├── GEMINI.md
-        ├── bin/
-        │   └── CLAUDE.md      # Directory-specific instructions
-        ├── claude/
-        │   ├── commands/      # Project-specific commands
-        │   ├── agents/
-        │   └── settings.json
-        ├── clank/             # Shared project documentation
-        │   └── overview.md
-        └── worktrees/
-            ├── main/
-            │   └── clank/     # Per-worktree task notes
-            │       ├── plan.md
-            │       └── notes.md
-            └── feature-auth/
-                └── clank/
-                    ├── plan.md
-                    └── notes.md
+Commit all changes in the overlay repository.
+
+**Options:**
+- `-m, --message <message>` - Commit message (default: "update")
+
+All commits are prefixed with `[clank]` and include a summary of changed files.
+
+**Example:**
+```bash
+clank commit                        # Commits with "[clank] update"
+clank commit -m "add style guide"   # Commits with "[clank] add style guide"
 ```
 
-## Target Project Structure (After `clank link`)
+### `clank check`
+
+Check for orphaned overlay paths that don't match the target project structure.
+Useful when a target project has renamed directories and the overlay needs updating.
+
+Outputs an agent-friendly prompt to help fix mismatches.
+
+**Example:**
+```bash
+clank check
+# Found 2 orphaned overlay path(s):
+#   notes.md (my-project)
+#     Expected dir: packages/old-name
+# ...
+# To fix with an agent, copy this prompt:
+# ──────────────────────────────────────────────────
+# The following overlay files no longer match...
+```
+
+### `clank help structure`
+
+Show the overlay directory structure and mapping rules.
+
+```bash
+clank help structure
+```
+
+### `--config <path>` (global option)
+
+Specify a custom config file location (default `~/.config/clank/config.js`).
+
+```bash
+clank --config /tmp/test-config.js init /tmp/test-overlay
+clank --config /tmp/test-config.js link
+```
+
+## Project Symlinks
+
+Clank places symlinks in your project referencing the relevant files in the overlay repository.
 
 ```
 ~/my-project/
-├── CLAUDE.md → overlay/targets/my-project/CLAUDE.md
-├── GEMINI.md → overlay/targets/my-project/CLAUDE.md (variant)
-├── .claude/
-│   ├── commands/
-│   │   ├── global.md → overlay/clank/commands/global.md
-│   │   └── project.md → overlay/targets/my-project/claude/commands/project.md
-│   ├── agents/ (merged global + project)
-│   └── settings.json → overlay/targets/my-project/claude/settings.json
-├── .github/
-│   └── copilot-instructions.md → overlay/targets/my-project/CLAUDE.md
-└── .clank/
-    ├── overview.md → overlay/targets/my-project/clank/overview.md
-    └── worktree/
-        ├── plan.md → overlay/targets/my-project/worktrees/main/clank/plan.md
-        └── notes.md → overlay/targets/my-project/worktrees/main/clank/notes.md
+├── CLAUDE.md                        # Agent file (→ overlay)
+├── GEMINI.md                        # Same content, different name
+├── .claude/commands/                # Claude commands (→ overlay)
+├── clank/notes.md                   # Notes and other files (→ overlay)
+└── packages/core/
+    ├── CLAUDE.md                    # Package-level agent file
+    ├── GEMINI.md
+    └── clank/architecture.md        # Package-level notes
+```
+
+`clank link` configures git to ignore the symlinks.
+
+### Scope Suffixes
+
+If you add a file with the same name at different scopes (e.g., `notes.md` with both `--global` and `--worktree`), Clank distinguishes them with suffixes:
+
+```
+clank/
+├── notes.md           # Global (no suffix)
+├── notes-project.md   # Project
+└── notes-worktree.md  # Worktree
 ```
 
 ## Configuration
 
-Global configuration is stored in `~/.clank.config.js` (or `.json`, `.yaml` via cosmiconfig):
+Global configuration is stored by default in `~/.config/clank/config.js`:
 
 ```javascript
 export default {
-  overlayRepo: "~/clank-overlay",
-  defaultVariants: ["claude", "gemini", "copilot"]
+  overlayRepo: "~/clankover",
+  agents: ["agents", "claude", "gemini"],
+  vscodeSettings: "auto",  // "auto" | "always" | "never"
+  vscodeGitignore: true
 };
 ```
 
-## Template Variables
+- `agents` - which symlinks to create for agent files like CLAUDE.md
+- `vscodeSettings` - when to generate `.vscode/settings.json` to show clank files in VS Code
+  - `"auto"` (default): only if project already has a `.vscode` directory
+  - `"always"`: always generate settings
+  - `"never"`: never auto-generate (you can still run `clank vscode` manually)
+- `vscodeGitignore` - add `.vscode/settings.json` to `.git/info/exclude` (default: true)
 
-Files in `overlay/clank/init/` can use placeholders:
+By default, clank creates symlinks for AGENTS.md, CLAUDE.md, and GEMINI.md.
+Run `clank unlink` then `clank link` to apply config changes.
 
-- `{{worktree_message}}` - "This is git worktree {branch} of project {project}" or empty
+## Worktree Templates
+
+Customize `overlay/global/init/` to create starter notes and planning files 
+for worktrees. 
+When you run `clank link` in a new worktree, 
+these templates are copied into your overlay.
+
+Available placeholders:
+
+- `{{worktree_message}}` - "This is git worktree {branch} of project {project}."
 - `{{project_name}}` - Project name from git
 - `{{branch_name}}` - Current branch/worktree name
 
@@ -211,30 +254,58 @@ Files in `overlay/clank/init/` can use placeholders:
 
 1. **Everything is linked, nothing is copied** - Single source of truth in overlay
 2. **Git-aware** - Automatic project and worktree detection
-3. **Shared by default, isolated when needed** - Commands shared, task notes isolated
-4. **Mirror structure** - Overlay hierarchy mirrors target hierarchy (minus dot prefixes)
-5. **Simple commands** - `link` does the heavy lifting, `add` for incremental growth
+3. **Explicit scopes** - Three clear levels: global, project, worktree
+4. **Flat target structure** - All clank notes show up together in `clank/`
+5. **Simple commands** - mostly `clank add` and `clank link`
 
-## Development
+## Reference
 
-```bash
-# Install dependencies
-npm install
+### Overlay Repository Structure
 
-# Run tests
-npm test
-
-# Type check
-npm run typecheck
-
-# Run locally
-./bin/clank.ts --help
+```
+~/clankover/
+├── global/
+│   ├── clank/                # Global files (--global)
+│   │   └── style.md
+│   ├── prompts/              # -> .claude/prompts/, .gemini/prompts/
+│   │   └── review.md
+│   ├── claude/               # Claude Code specific
+│   │   ├── commands/         # -> .claude/commands/
+│   │   └── agents/           # -> .claude/agents/
+│   ├── gemini/               # Gemini specific
+│   │   └── commands/         # -> .gemini/commands/
+│   └── init/                 # Templates for new worktrees
+│       └── clank/
+│           └── notes.md
+└── targets/
+    └── my-project/
+        ├── agents.md         # Agent instructions (source of truth)
+        ├── clank/            # Project files (--project)
+        │   └── overview.md
+        ├── prompts/          # -> .claude/prompts/, .gemini/prompts/
+        │   └── manifest.md
+        ├── claude/           # Claude Code specific
+        │   ├── settings.json # -> .claude/settings.json
+        │   ├── commands/     # -> .claude/commands/
+        │   └── agents/       # -> .claude/agents/
+        ├── gemini/           # Gemini specific
+        │   └── commands/     # -> .gemini/commands/
+        └── worktrees/
+            ├── main/
+            │   ├── clank/    # Worktree files (--worktree)
+            │   │   └── notes.md
+            │   ├── prompts/  # Worktree-specific prompts
+            │   └── agents.md # Worktree agents file (optional)
+            └── feature-auth/
+                └── clank/
+                    └── notes.md
 ```
 
 ## Requirements
 
-- Node.js >= 20.0.0
+- Node.js >= 22.6.0
 - Git repository (for project/worktree detection)
+- macOS, Linux, or [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
 
 ## License
 
