@@ -2,7 +2,12 @@ import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../Config.ts";
 import { addToGitExclude } from "../Exclude.ts";
-import { ensureDir, fileExists, isTrackedByGit, writeJsonFile } from "../FsUtil.ts";
+import {
+  ensureDir,
+  fileExists,
+  isTrackedByGit,
+  writeJsonFile,
+} from "../FsUtil.ts";
 import { detectGitRoot } from "../Git.ts";
 import {
   collectGitignorePatterns,
@@ -34,7 +39,8 @@ export async function generateVscodeSettings(
   const { patterns, negationWarnings } =
     await collectGitignorePatterns(targetRoot);
 
-  for (const pattern of negationWarnings) {
+  const uniqueWarnings = [...new Set(negationWarnings)];
+  for (const pattern of uniqueWarnings) {
     console.log(
       `Warning: Cannot represent negation pattern "!${pattern}" in VS Code settings.`,
     );
