@@ -16,7 +16,6 @@
     "typecheck": "tsc --noEmit",
     "bump": "monobump",
     "global": "pnpm link --global",
-    "build": "tsc",
     "lint": "biome check",
     "fix": "biome check --fix --unsafe"
   },
@@ -25,6 +24,7 @@
   },
   "keywords": [
     "ai",
+    "agent",
     "assistant",
     "claude",
     "gemini",
