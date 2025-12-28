@@ -45,6 +45,7 @@
     "@biomejs/biome": "^2.3.8",
     "@types/node": "^24.10.1",
     "@typescript/native-preview": "7.0.0-dev.20251221.1",
+    "@vitest/ui": "^4.0.16",
     "execa": "^9.6.1",
     "monobump": "^0.1.5",
     "npm-run-all2": "^7.0.2",
