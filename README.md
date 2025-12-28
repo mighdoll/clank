@@ -2,16 +2,16 @@
 
 Store AI agent files and notes in a separate git repository. Git-ignored symlinks make the files visible in your projects.
 
+Common commands:
 - **`clank add`** to move files to the overlay.
+- **`clank rm`** to remove files from the overlay.
 - **`clank link`** to connect overlay files to your project.
-- **`clank unlink`** to disconnect.
 - **`clank commit`** to commit changes in the overlay repository.
-- **`clank check`** to show overlay status and help realign overlay files when your project restructures.
+- **`clank check`** to show overlay status and find misaligned files.
 
 ## Why a Separate Repository?
 
-Clank stores your AI agent files (CLAUDE.md, commands, notes) in a separate git repository 
-symlinks them into your project. This separation provides key advantages:
+Clank stores your AI agent files (CLAUDE.md, commands, notes) in a separate git repository and symlinks them into your project. This separation provides key advantages:
 
 - **Different Review Cadence**: Update agent instructions, commands, and notes without requiring the same review process as production code.
 - **Work on Repos You Don't Control**: Add agent context to open source projects or third-party codebases without forking or modifying.
@@ -39,49 +39,27 @@ npx clank init
 
 ## Quick Start
 
-### 1. Initialize Overlay Repository
-
 ```bash
-clank init
-# Creates ~/clankover with default structure
-# Creates ~/.config/clank/config.js
-```
-
-### 2. Link to Your Project
-
-```bash
+clank init                    # Create overlay repository (~/.clankover)
 cd ~/my-project
-clank link
-# Auto-detects project name from git
-# Creates symlinks from overlay to current directory
+clank link                    # Connect project to overlay
+clank add CLAUDE.md           # Add agent file (creates symlinks)
+clank add notes.md --global   # Add global file (shared across projects)
 ```
 
-### 3. Add Files with `clank add`
-
-The `clank add` command moves files to the overlay and creates symlinks.
-Agent files (CLAUDE.md, AGENTS.md) stay in place; other files go in `clank/`.
-
-> You can run `clank add` from any subdirectory. Agent files and `clank/` folders work at any level in your project tree.
-
-```bash
-# Add to project scope (default) - shared across all branches
-clank add CLAUDE.md
-
-# Add to global scope - shared across all projects
-clank add style.md --global
-
-# Add to worktree scope - this branch only
-clank add notes.md --worktree
-
-# Add commands
-clank add .claude/commands/review.md --global   # All projects
-clank add .claude/commands/build.md             # This project
-
-# Add a directory (all files inside)
-clank add clank/
-```
+Agent files (CLAUDE.md, AGENTS.md, GEMINI.md) stay in place; other files go in `clank/`. You can run `clank add` from any subdirectory.
 
 ## Commands
+
+### Scope Options
+
+Several commands (`add`, `rm`, `mv`) accept scope flags to specify where files are stored:
+
+| Flag | Scope | Shared Across |
+|------|-------|---------------|
+| `--global`, `-g` | Global | All projects |
+| `--project`, `-p` | Project (default) | All branches in project |
+| `--worktree`, `-w` | Worktree | This branch only |
 
 ### `clank init [overlay-path]`
 
@@ -103,16 +81,7 @@ clank link ~/my-project # Link to specific project
 
 ### `clank add <file> [options]`
 
-Move a file to the overlay and replace it with a symlink.
-If the file doesn't exist, an empty file is created.
-
-**Scope Options:**
-
-| Flag | Scope | Shared Across |
-|------|-------|---------------|
-| `--global` | Global | All projects |
-| `--project` | Project (default) | All branches in project |
-| `--worktree` | Worktree | This branch only |
+Move a file to the overlay and replace it with a symlink. If the file doesn't exist, an empty file is created. Accepts [scope options](#scope-options).
 
 **Examples:**
 ```bash
@@ -170,14 +139,7 @@ clank check
 
 ### `clank rm <files...>` (alias: `remove`)
 
-Remove file(s) from both the overlay repository and the local project symlinks.
-
-**Options:**
-- `-g, --global` - Remove from global scope
-- `-p, --project` - Remove from project scope
-- `-w, --worktree` - Remove from worktree scope
-
-If no scope is specified, clank attempts to detect it from the symlink or searches all scopes (erroring if ambiguous).
+Remove file(s) from both the overlay repository and the local project symlinks. Accepts [scope options](#scope-options); if omitted, clank detects the scope from the symlink.
 
 **Example:**
 ```bash
@@ -187,12 +149,7 @@ clank rm style.md --global         # Remove global style guide
 
 ### `clank mv <files...>` (alias: `move`)
 
-Move file(s) between overlay scopes (e.g., promote a worktree file to project scope).
-
-**Options:**
-- `-g, --global` - Move to global scope
-- `-p, --project` - Move to project scope
-- `-w, --worktree` - Move to worktree scope
+Move file(s) between overlay scopes. Requires one [scope option](#scope-options) to specify the destination.
 
 **Example:**
 ```bash
@@ -212,15 +169,7 @@ Since clank relies on symlinked files that are git-ignored, VS Code often hides 
 **Options:**
 - `--remove` - Remove the clank-generated settings
 
-**Configuration:**
-You can control this behavior via `~/.config/clank/config.js`:
-```javascript
-export default {
-  // ...
-  vscodeSettings: "auto", // "auto" (default) | "always" | "never"
-  vscodeGitignore: true   // Add .vscode/settings.json to .git/info/exclude
-};
-```
+See [Configuration](#configuration) for `vscodeSettings` and `vscodeGitignore` options.
 
 ### `clank help structure`
 
@@ -293,10 +242,7 @@ Run `clank unlink` then `clank link` to apply config changes.
 
 ## Worktree Templates
 
-Customize `overlay/global/init/` to create starter notes and planning files 
-for worktrees. 
-When you run `clank link` in a new worktree, 
-these templates are copied into your overlay.
+Customize `global/init/clank/` in your overlay to create starter notes and planning files for new worktrees. When you run `clank link` in a new worktree, these templates are copied into the worktree's overlay directory.
 
 Available placeholders:
 
@@ -308,9 +254,8 @@ Available placeholders:
 
 1. **Everything is linked, nothing is copied** - Single source of truth in overlay
 2. **Git-aware** - Automatic project and worktree detection
-3. **Explicit scopes** - Three clear levels: global, project, worktree
-4. **Flat target structure** - All clank notes show up together in `clank/`
-5. **Simple commands** - mostly `clank add` and `clank link`
+3. **Explicit scopes** - Three levels: global, project, worktree
+4. **Flat target structure** - All notes show up together in `clank/`
 
 ## Reference
 
