@@ -16,7 +16,7 @@
     "fix": "biome check --fix --unsafe",
     "fix:pkgJsonFormat": "syncpack format",
     "global": "pnpm link --global",
-    "lint": "biome check",
+    "lint": "biome check --error-on-warnings",
     "prepublishOnly": "run-s lint typecheck fix:pkgJsonFormat test:once",
     "test": "vitest",
     "test:once": "vitest run",
