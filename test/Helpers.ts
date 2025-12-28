@@ -66,6 +66,8 @@ export async function setupTestEnvironment(): Promise<TestContext> {
 
   // Initialize git repo in target
   await execa({ cwd: targetDir })`git init`;
+  await execa({ cwd: targetDir })`git config user.email "test@test.com"`;
+  await execa({ cwd: targetDir })`git config user.name "Test User"`;
   await execa({
     cwd: targetDir,
   })`git remote add origin https://github.com/test/my-project.git`;
