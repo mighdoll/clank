@@ -29,4 +29,8 @@ jobs:
           cache: 'pnpm'
 
       - run: pnpm install --frozen-lockfile
+      - name: Configure git for tests
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
       - run: pnpm publish --no-git-checks

@@ -17,13 +17,6 @@ export interface TestContext {
   configPath: string;
 }
 
-const gitEnv = {
-  GIT_AUTHOR_NAME: "Test User",
-  GIT_AUTHOR_EMAIL: "test@test.com",
-  GIT_COMMITTER_NAME: "Test User",
-  GIT_COMMITTER_EMAIL: "test@test.com",
-};
-
 /** Create a tree-like string representation of a directory */
 export async function tree(
   dir: string,
@@ -80,7 +73,7 @@ export async function setupTestEnvironment(): Promise<TestContext> {
   // Need at least one commit for git branch to work
   await writeFile(join(targetDir, ".gitkeep"), "", "utf-8");
   await execa({ cwd: targetDir })`git add .`;
-  await execa({ cwd: targetDir, env: gitEnv })`git commit -m ${"initial"}`;
+  await execa({ cwd: targetDir })`git commit -m ${"initial"}`;
 
   return { tempDir, overlayDir, targetDir, configPath };
 }
@@ -109,7 +102,6 @@ export function clank(ctx: TestContext, command: string) {
   const args = command.split(" ");
   return execa(clankBin, [...args, "--config", ctx.configPath], {
     cwd: ctx.targetDir,
-    env: { ...process.env, ...gitEnv },
   });
 }
 
