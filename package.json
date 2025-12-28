@@ -15,7 +15,7 @@
     "test:ui": "vitest --ui",
     "typecheck": "tsc --noEmit",
     "bump": "monobump",
-    "install": "pnpm install --global $PWD",
+    "global": "pnpm link --global",
     "build": "tsc",
     "lint": "biome check",
     "fix": "biome check --fix --unsafe"
