@@ -18,6 +18,7 @@
     "global": "pnpm link --global",
     "lint": "biome check",
     "fix": "biome check --fix --unsafe",
+    "fix:pkgJsonFormat": "syncpack format",
     "prepublishOnly": "run-s lint typecheck test"
   },
   "engines": {
@@ -49,6 +50,7 @@
     "execa": "^9.6.1",
     "monobump": "^0.1.5",
     "npm-run-all2": "^7.0.2",
+    "syncpack": "^13.0.4",
     "vitest": "^4.0.14"
   }
 }
