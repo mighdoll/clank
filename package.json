@@ -13,11 +13,12 @@
   "scripts": {
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo",
     "bump": "monobump",
     "global": "pnpm link --global",
     "lint": "biome check",
-    "fix": "biome check --fix --unsafe"
+    "fix": "biome check --fix --unsafe",
+    "prepublishOnly": "run-s lint typecheck test"
   },
   "engines": {
     "node": ">=22.6.0"
@@ -43,9 +44,10 @@
   "devDependencies": {
     "@biomejs/biome": "^2.3.8",
     "@types/node": "^24.10.1",
+    "@typescript/native-preview": "7.0.0-dev.20251221.1",
     "execa": "^9.6.1",
     "monobump": "^0.1.5",
-    "typescript": "^5.9.3",
+    "npm-run-all2": "^7.0.2",
     "vitest": "^4.0.14"
   }
 }
