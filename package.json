@@ -11,6 +11,7 @@
     "bin/",
     "src/"
   ],
+  "repository": "github:mighdoll/clank",
   "scripts": {
     "bump": "monobump",
     "fix": "biome check --fix --unsafe",
