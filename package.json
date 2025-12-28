@@ -17,8 +17,9 @@
     "fix:pkgJsonFormat": "syncpack format",
     "global": "pnpm link --global",
     "lint": "biome check",
-    "prepublishOnly": "run-s lint typecheck test",
+    "prepublishOnly": "run-s lint typecheck fix:pkgJsonFormat test:once",
     "test": "vitest",
+    "test:once": "vitest run",
     "test:ui": "vitest --ui",
     "typecheck": "tsgo"
   },

@@ -1,7 +1,12 @@
 import { lstat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { agentFiles } from "./AgentFiles.ts";
-import { isTrackedByGit, relativePath, resolveSymlinkTarget, walkDirectory } from "./FsUtil.ts";
+import {
+  isTrackedByGit,
+  relativePath,
+  resolveSymlinkTarget,
+  walkDirectory,
+} from "./FsUtil.ts";
 import type { GitContext } from "./Git.ts";
 import { type MapperContext, targetToOverlay } from "./Mapper.ts";
 

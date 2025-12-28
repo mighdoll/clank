@@ -169,7 +169,6 @@ async function parseGitignoreFile(
   result.negationWarnings.push(...parsed.negationWarnings);
 }
 
-
 /** Parse a single gitignore line */
 function parseLine(
   trimmed: string,
@@ -195,7 +194,9 @@ function parseGitignoreContent(
   options: ParseOptions,
 ): { patterns: GitignorePattern[]; negationWarnings: string[] } {
   const rawLines = content.split("\n");
-  const lines = options.skipClankSection ? filterClankLines(rawLines) : rawLines;
+  const lines = options.skipClankSection
+    ? filterClankLines(rawLines)
+    : rawLines;
   const basePath = options.basePath ?? "";
 
   const patterns: GitignorePattern[] = [];

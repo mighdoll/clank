@@ -167,6 +167,8 @@ async function recreatePromptLinks(
   const created = await createPromptLinks(overlayPath, promptRelPath, gitRoot);
 
   if (created.length > 0) {
-    console.log(`Updated symlinks: ${created.map((p) => relative(gitRoot, p)).join(", ")}`);
+    console.log(
+      `Updated symlinks: ${created.map((p) => relative(gitRoot, p)).join(", ")}`,
+    );
   }
 }

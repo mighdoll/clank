@@ -1,8 +1,18 @@
 import { lstat } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { managedAgentDirs } from "./AgentFiles.ts";
-import { createSymlink, ensureDir, getLinkTarget, resolveSymlinkTarget, walkDirectory } from "./FsUtil.ts";
-import { getPromptRelPath, type MapperContext, overlayToTarget } from "./Mapper.ts";
+import {
+  createSymlink,
+  ensureDir,
+  getLinkTarget,
+  resolveSymlinkTarget,
+  walkDirectory,
+} from "./FsUtil.ts";
+import {
+  getPromptRelPath,
+  type MapperContext,
+  overlayToTarget,
+} from "./Mapper.ts";
 
 export type ManagedFileState =
   | { kind: "valid" }

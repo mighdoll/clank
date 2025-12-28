@@ -122,9 +122,15 @@ async function addSingleFile(
     // Prompt files get symlinks in all agent directories
     const promptRelPath = getPromptRelPath(normalizedPath);
     if (promptRelPath) {
-      const created = await createPromptLinks(overlayPath, promptRelPath, gitRoot);
+      const created = await createPromptLinks(
+        overlayPath,
+        promptRelPath,
+        gitRoot,
+      );
       if (created.length) {
-        console.log(`Created symlinks: ${created.map((p) => relative(cwd, p)).join(", ")}`);
+        console.log(
+          `Created symlinks: ${created.map((p) => relative(cwd, p)).join(", ")}`,
+        );
       }
     }
   } else {

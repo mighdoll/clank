@@ -6,7 +6,12 @@ import {
   classifyAgentFiles,
   formatAgentFileProblems,
 } from "../ClassifyFiles.ts";
-import { type ClankConfig, expandPath, loadConfig, validateOverlayExists } from "../Config.ts";
+import {
+  type ClankConfig,
+  expandPath,
+  loadConfig,
+  validateOverlayExists,
+} from "../Config.ts";
 import { addGitExcludes } from "../Exclude.ts";
 import {
   createSymlink,

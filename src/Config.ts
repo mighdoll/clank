@@ -89,7 +89,9 @@ function getConfigDir(): string {
 }
 
 /** Validate overlay repository exists, throw if not */
-export async function validateOverlayExists(overlayRoot: string): Promise<void> {
+export async function validateOverlayExists(
+  overlayRoot: string,
+): Promise<void> {
   if (!(await fileExists(overlayRoot))) {
     throw new Error(
       `Overlay repository not found at ${overlayRoot}\nRun 'clank init' to create it`,
