@@ -1,7 +1,8 @@
 {
   "name": "clank-cli",
-  "version": "0.1.52",
   "description": "Keep AI files in a separate overlay repository",
+  "version": "0.1.52",
+  "author": "",
   "type": "module",
   "bin": {
     "clank": "./bin/clank.ts"
@@ -11,33 +12,16 @@
     "src/"
   ],
   "scripts": {
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "typecheck": "tsgo",
     "bump": "monobump",
-    "global": "pnpm link --global",
-    "lint": "biome check",
     "fix": "biome check --fix --unsafe",
     "fix:pkgJsonFormat": "syncpack format",
-    "prepublishOnly": "run-s lint typecheck test"
+    "global": "pnpm link --global",
+    "lint": "biome check",
+    "prepublishOnly": "run-s lint typecheck test",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "typecheck": "tsgo"
   },
-  "engines": {
-    "node": ">=22.6.0"
-  },
-  "keywords": [
-    "ai",
-    "agent",
-    "assistant",
-    "claude",
-    "gemini",
-    "copilot",
-    "configuration",
-    "worktree",
-    "git"
-  ],
-  "author": "",
-  "license": "MIT",
-  "packageManager": "pnpm@10.23.0",
   "dependencies": {
     "commander": "^14.0.2",
     "cosmiconfig": "^9.0.0"
@@ -52,5 +36,21 @@
     "npm-run-all2": "^7.0.2",
     "syncpack": "^13.0.4",
     "vitest": "^4.0.14"
+  },
+  "license": "MIT",
+  "keywords": [
+    "agent",
+    "ai",
+    "assistant",
+    "claude",
+    "configuration",
+    "copilot",
+    "gemini",
+    "git",
+    "worktree"
+  ],
+  "packageManager": "pnpm@10.23.0",
+  "engines": {
+    "node": ">=22.6.0"
   }
 }
