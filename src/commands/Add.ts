@@ -119,28 +119,47 @@ async function addSingleFile(
     const params = { overlayPath, symlinkDir, gitRoot, overlayRoot, agents };
     await createAgentLinks(params);
   } else if (isPromptFile(normalizedPath)) {
-    // Prompt files get symlinks in all agent directories
-    const promptRelPath = getPromptRelPath(normalizedPath);
-    if (promptRelPath) {
-      const created = await createPromptLinks(
-        overlayPath,
-        promptRelPath,
-        gitRoot,
-      );
-      if (created.length) {
-        console.log(
-          `Created symlinks: ${created.map((p) => relative(cwd, p)).join(", ")}`,
-        );
-      }
-    }
+    await handlePromptFile(normalizedPath, overlayPath, gitRoot, cwd);
   } else {
-    if (await isSymlinkToOverlay(normalizedPath, overlayRoot)) {
-      console.log(`Symlink already exists: ${relative(cwd, normalizedPath)}`);
-    } else {
-      const linkTarget = getLinkTarget(normalizedPath, overlayPath);
-      await createSymlink(linkTarget, normalizedPath);
-      console.log(`Created symlink: ${relative(cwd, normalizedPath)}`);
+    await handleRegularFile(normalizedPath, overlayPath, overlayRoot, cwd);
+  }
+}
+
+/** Handle prompt file symlink creation */
+async function handlePromptFile(
+  normalizedPath: string,
+  overlayPath: string,
+  gitRoot: string,
+  cwd: string,
+): Promise<void> {
+  const promptRelPath = getPromptRelPath(normalizedPath);
+  if (promptRelPath) {
+    const created = await createPromptLinks(
+      overlayPath,
+      promptRelPath,
+      gitRoot,
+    );
+    if (created.length) {
+      console.log(
+        `Created symlinks: ${created.map((p) => relative(cwd, p)).join(", ")}`,
+      );
     }
+  }
+}
+
+/** Handle regular file symlink creation */
+async function handleRegularFile(
+  normalizedPath: string,
+  overlayPath: string,
+  overlayRoot: string,
+  cwd: string,
+): Promise<void> {
+  if (await isSymlinkToOverlay(normalizedPath, overlayRoot)) {
+    console.log(`Symlink already exists: ${relative(cwd, normalizedPath)}`);
+  } else {
+    const linkTarget = getLinkTarget(normalizedPath, overlayPath);
+    await createSymlink(linkTarget, normalizedPath);
+    console.log(`Created symlink: ${relative(cwd, normalizedPath)}`);
   }
 }
 
