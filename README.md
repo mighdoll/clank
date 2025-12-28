@@ -149,7 +149,7 @@ clank commit                        # Commits with "[clank] update"
 clank commit -m "add style guide"   # Commits with "[clank] add style guide"
 ```
 
-### `clank check`
+### `clank check` (alias: `status`)
 
 Check for orphaned overlay paths that don't match the target project structure.
 Useful when a target project has renamed directories and the overlay needs updating.
@@ -166,6 +166,60 @@ clank check
 # To fix with an agent, copy this prompt:
 # ──────────────────────────────────────────────────
 # The following overlay files no longer match...
+```
+
+### `clank rm <files...>` (alias: `remove`)
+
+Remove file(s) from both the overlay repository and the local project symlinks.
+
+**Options:**
+- `-g, --global` - Remove from global scope
+- `-p, --project` - Remove from project scope
+- `-w, --worktree` - Remove from worktree scope
+
+If no scope is specified, clank attempts to detect it from the symlink or searches all scopes (erroring if ambiguous).
+
+**Example:**
+```bash
+clank rm clank/notes.md            # Remove from whatever scope it belongs to
+clank rm style.md --global         # Remove global style guide
+```
+
+### `clank mv <files...>` (alias: `move`)
+
+Move file(s) between overlay scopes (e.g., promote a worktree file to project scope).
+
+**Options:**
+- `-g, --global` - Move to global scope
+- `-p, --project` - Move to project scope
+- `-w, --worktree` - Move to worktree scope
+
+**Example:**
+```bash
+# Promote a worktree note to project scope
+clank mv clank/notes.md --project
+
+# Share a local command globally
+clank mv .claude/commands/test.md --global
+```
+
+### `clank vscode`
+
+Generate `.vscode/settings.json` to make clank files visible in VS Code's explorer and search, while still respecting your `.gitignore` rules.
+
+Since clank relies on symlinked files that are git-ignored, VS Code often hides them by default. This command explicitly excludes your gitignored files in `settings.json` while un-hiding the clank folders.
+
+**Options:**
+- `--remove` - Remove the clank-generated settings
+
+**Configuration:**
+You can control this behavior via `~/.config/clank/config.js`:
+```javascript
+export default {
+  // ...
+  vscodeSettings: "auto", // "auto" (default) | "always" | "never"
+  vscodeGitignore: true   // Add .vscode/settings.json to .git/info/exclude
+};
 ```
 
 ### `clank help structure`
