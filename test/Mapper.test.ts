@@ -83,6 +83,24 @@ test("normalizeAddPath preserves .claude/ paths", () => {
   );
 });
 
+test("normalizeAddPath handles running from inside .claude/ directory", () => {
+  // When cwd is inside .claude/, files should join directly (no clank/ prefix)
+  const claudeCwd = "/target/.claude/commands";
+  expect(normalizeAddPath("review.md", claudeCwd, gitRoot)).toBe(
+    "/target/.claude/commands/review.md",
+  );
+  expect(normalizeAddPath("subdir/foo.md", claudeCwd, gitRoot)).toBe(
+    "/target/.claude/commands/subdir/foo.md",
+  );
+});
+
+test("normalizeAddPath handles running from inside .gemini/ directory", () => {
+  const geminiCwd = "/target/.gemini/commands";
+  expect(normalizeAddPath("review.md", geminiCwd, gitRoot)).toBe(
+    "/target/.gemini/commands/review.md",
+  );
+});
+
 test("normalizeAddPath avoids nesting when cwd is clank/", () => {
   // When running from inside clank/ directory, don't create clank/clank
   const clankCwd = "/target/clank";

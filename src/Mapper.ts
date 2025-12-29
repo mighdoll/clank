@@ -190,6 +190,15 @@ export function normalizeAddPath(
     }
   }
 
+  // If cwd is inside a .claude/ or .gemini/ directory, join directly
+  // (e.g., running `clank rm foo.md` from .claude/commands/)
+  const relCwd = relative(gitRoot, cwd);
+  for (const agentDir of managedAgentDirs) {
+    if (relCwd.startsWith(`${agentDir}/`) || relCwd === agentDir) {
+      return join(cwd, normalized);
+    }
+  }
+
   // If path already contains /clank/ in the middle, preserve its structure
   if (normalized.includes("/clank/")) {
     return join(cwd, normalized);
