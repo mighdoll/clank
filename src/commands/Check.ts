@@ -28,6 +28,9 @@ export type UnaddedFile = ManagedFileState & {
   relativePath: string;
 };
 
+/** Files that should remain local and not be tracked by clank */
+const localOnlyFiles = ["settings.local.json"];
+
 /** Check for orphaned overlay paths that don't match target structure */
 export async function checkCommand(): Promise<void> {
   const cwd = process.cwd();
@@ -44,163 +47,6 @@ export async function checkCommand(): Promise<void> {
   if (!problems) {
     console.log("No issues found. Overlay matches target structure.");
   }
-}
-
-/** Run all checks and display problems. Returns true if any problems found. */
-async function checkAllProblems(
-  ctx: MapperContext,
-  cwd: string,
-  ignorePatterns: string[] = [],
-): Promise<boolean> {
-  const { overlayRoot, targetRoot, gitContext } = ctx;
-  let hasProblems = false;
-
-  const unadded = await findUnaddedFiles(ctx);
-  if (unadded.length > 0) {
-    hasProblems = true;
-    showUnaddedFiles(unadded, cwd, gitContext);
-  }
-
-  const agentClassification = await classifyAgentFiles(
-    targetRoot,
-    overlayRoot,
-    gitContext,
-  );
-  if (agentFileProblems(agentClassification)) {
-    hasProblems = true;
-    console.log(formatAgentFileProblems(agentClassification, cwd));
-    console.log();
-  }
-
-  const orphans = await findOrphans(
-    overlayRoot,
-    targetRoot,
-    gitContext.projectName,
-    ignorePatterns,
-  );
-  if (orphans.length > 0) {
-    hasProblems = true;
-    showOrphanedPaths(orphans, targetRoot, overlayRoot);
-  }
-
-  return hasProblems;
-}
-
-/** Display orphaned paths and remediation prompt */
-function showOrphanedPaths(
-  orphans: OrphanedPath[],
-  targetRoot: string,
-  overlayRoot: string,
-): void {
-  console.log(`Found ${orphans.length} orphaned overlay path(s):\n`);
-  for (const orphan of orphans) {
-    console.log(`  ${orphan.fileName} (${orphan.scope})`);
-    console.log(`    Overlay: ${orphan.overlayPath}`);
-    console.log(`    Expected dir: ${orphan.expectedTargetDir}\n`);
-  }
-
-  console.log("Target project:", targetRoot);
-  console.log("Overlay:", overlayRoot);
-  console.log("\nTo fix with an agent, copy this prompt:");
-  console.log("─".repeat(50));
-  console.log(generateAgentPrompt(orphans, targetRoot, overlayRoot));
-  console.log("─".repeat(50));
-}
-
-/** Show git status of the overlay repository */
-async function showOverlayStatus(
-  overlayRoot: string,
-  ignorePatterns: string[] = [],
-): Promise<void> {
-  if (!(await fileExists(overlayRoot))) {
-    console.log("Overlay repository not found\n");
-    return;
-  }
-
-  const lines = await getOverlayStatus(overlayRoot, ignorePatterns);
-
-  console.log(`Overlay: ${overlayRoot}`);
-
-  if (lines.length === 0) {
-    console.log("Status: clean\n");
-    return;
-  }
-
-  console.log(`Status: ${lines.length} uncommitted change(s)\n`);
-
-  for (const formatted of formatStatusLines(lines)) {
-    console.log(`  ${formatted}`);
-  }
-  console.log();
-}
-
-/** Display unadded files in clank-managed directories */
-function showUnaddedFiles(
-  unadded: UnaddedFile[],
-  cwd: string,
-  gitContext: GitContext,
-): void {
-  const { isWorktree, worktreeName, projectName } = gitContext;
-  const targetName = isWorktree
-    ? `${projectName}/${worktreeName}`
-    : projectName;
-
-  const outsideOverlay = unadded.filter((f) => f.kind === "outside-overlay");
-  const wrongMapping = unadded.filter((f) => f.kind === "wrong-mapping");
-  const regularFiles = unadded.filter((f) => f.kind === "unadded");
-
-  if (outsideOverlay.length > 0) {
-    console.log(
-      `Found ${outsideOverlay.length} stale symlink(s) in ${targetName}:\n`,
-    );
-    console.log("These symlinks point outside the clank overlay.");
-    console.log("Remove them, then run `clank link` to recreate:\n");
-    for (const file of outsideOverlay) {
-      console.log(`  rm ${relativePath(cwd, file.targetPath)}`);
-    }
-    console.log();
-  }
-
-  if (wrongMapping.length > 0) {
-    console.log(
-      `Found ${wrongMapping.length} mislinked symlink(s) in ${targetName}:\n`,
-    );
-    console.log("These symlinks point to the wrong overlay location.");
-    console.log("Remove them, then run `clank link` to recreate:\n");
-    for (const file of wrongMapping) {
-      console.log(`  rm ${relativePath(cwd, file.targetPath)}`);
-      if (file.currentTarget && file.expectedTarget) {
-        console.log(`    points to: ${file.currentTarget}`);
-        console.log(`    expected:  ${file.expectedTarget}`);
-      }
-    }
-    console.log();
-  }
-
-  if (regularFiles.length > 0) {
-    console.log(
-      `Found ${regularFiles.length} unadded file(s) in ${targetName}:\n`,
-    );
-    for (const file of regularFiles) {
-      console.log(`  clank add ${relativePath(cwd, file.targetPath)}`);
-    }
-    console.log();
-  }
-}
-
-/** Files that should remain local and not be tracked by clank */
-const localOnlyFiles = ["settings.local.json"];
-
-/** Check if a path is inside a clank-managed directory */
-function isInManagedDir(relPath: string): boolean {
-  const parts = relPath.split("/");
-  return parts.some((part) => targetManagedDirs.includes(part));
-}
-
-/** Check if a file should remain local (not tracked by clank) */
-function isLocalOnlyFile(relPath: string): boolean {
-  const fileName = basename(relPath);
-  return localOnlyFiles.includes(fileName);
 }
 
 /** Find files in clank-managed directories that aren't valid symlinks to the overlay */
@@ -286,6 +132,85 @@ export async function findOrphans(
   return orphans;
 }
 
+/** Show git status of the overlay repository */
+async function showOverlayStatus(
+  overlayRoot: string,
+  ignorePatterns: string[] = [],
+): Promise<void> {
+  if (!(await fileExists(overlayRoot))) {
+    console.log("Overlay repository not found\n");
+    return;
+  }
+
+  const lines = await getOverlayStatus(overlayRoot, ignorePatterns);
+
+  console.log(`Overlay: ${overlayRoot}`);
+
+  if (lines.length === 0) {
+    console.log("Status: clean\n");
+    return;
+  }
+
+  console.log(`Status: ${lines.length} uncommitted change(s)\n`);
+
+  for (const formatted of formatStatusLines(lines)) {
+    console.log(`  ${formatted}`);
+  }
+  console.log();
+}
+
+/** Run all checks and display problems. Returns true if any problems found. */
+async function checkAllProblems(
+  ctx: MapperContext,
+  cwd: string,
+  ignorePatterns: string[] = [],
+): Promise<boolean> {
+  const { overlayRoot, targetRoot, gitContext } = ctx;
+  let hasProblems = false;
+
+  const unadded = await findUnaddedFiles(ctx);
+  if (unadded.length > 0) {
+    hasProblems = true;
+    showUnaddedFiles(unadded, cwd, gitContext);
+  }
+
+  const agentClassification = await classifyAgentFiles(
+    targetRoot,
+    overlayRoot,
+    gitContext,
+  );
+  if (agentFileProblems(agentClassification)) {
+    hasProblems = true;
+    console.log(formatAgentFileProblems(agentClassification, cwd));
+    console.log();
+  }
+
+  const orphans = await findOrphans(
+    overlayRoot,
+    targetRoot,
+    gitContext.projectName,
+    ignorePatterns,
+  );
+  if (orphans.length > 0) {
+    hasProblems = true;
+    showOrphanedPaths(orphans, targetRoot, overlayRoot);
+  }
+
+  return hasProblems;
+}
+
+/** Check if a path is inside a clank-managed directory */
+function isInManagedDir(relPath: string): boolean {
+  const parts = relPath.split("/");
+  return parts.some((part) => targetManagedDirs.includes(part));
+}
+
+/** Check if a file should remain local (not tracked by clank) */
+function isLocalOnlyFile(relPath: string): boolean {
+  const fileName = basename(relPath);
+  return localOnlyFiles.includes(fileName);
+}
+
 /** Extract the target subdirectory from an overlay path
  * @param relPath - Path relative to overlay project dir (e.g., targets/wesl-js/)
  * @returns Target subdirectory path, or null if not a subdirectory file
@@ -303,6 +228,81 @@ function extractTargetSubdir(relPath: string): string | null {
     return relPath.slice(0, -"/agents.md".length);
   }
   return null;
+}
+
+/** Display unadded files in clank-managed directories */
+function showUnaddedFiles(
+  unadded: UnaddedFile[],
+  cwd: string,
+  gitContext: GitContext,
+): void {
+  const { isWorktree, worktreeName, projectName } = gitContext;
+  const targetName = isWorktree
+    ? `${projectName}/${worktreeName}`
+    : projectName;
+
+  const outsideOverlay = unadded.filter((f) => f.kind === "outside-overlay");
+  const wrongMapping = unadded.filter((f) => f.kind === "wrong-mapping");
+  const regularFiles = unadded.filter((f) => f.kind === "unadded");
+
+  if (outsideOverlay.length > 0) {
+    console.log(
+      `Found ${outsideOverlay.length} stale symlink(s) in ${targetName}:\n`,
+    );
+    console.log("These symlinks point outside the clank overlay.");
+    console.log("Remove them, then run `clank link` to recreate:\n");
+    for (const file of outsideOverlay) {
+      console.log(`  rm ${relativePath(cwd, file.targetPath)}`);
+    }
+    console.log();
+  }
+
+  if (wrongMapping.length > 0) {
+    console.log(
+      `Found ${wrongMapping.length} mislinked symlink(s) in ${targetName}:\n`,
+    );
+    console.log("These symlinks point to the wrong overlay location.");
+    console.log("Remove them, then run `clank link` to recreate:\n");
+    for (const file of wrongMapping) {
+      console.log(`  rm ${relativePath(cwd, file.targetPath)}`);
+      if (file.currentTarget && file.expectedTarget) {
+        console.log(`    points to: ${file.currentTarget}`);
+        console.log(`    expected:  ${file.expectedTarget}`);
+      }
+    }
+    console.log();
+  }
+
+  if (regularFiles.length > 0) {
+    console.log(
+      `Found ${regularFiles.length} unadded file(s) in ${targetName}:\n`,
+    );
+    for (const file of regularFiles) {
+      console.log(`  clank add ${relativePath(cwd, file.targetPath)}`);
+    }
+    console.log();
+  }
+}
+
+/** Display orphaned paths and remediation prompt */
+function showOrphanedPaths(
+  orphans: OrphanedPath[],
+  targetRoot: string,
+  overlayRoot: string,
+): void {
+  console.log(`Found ${orphans.length} orphaned overlay path(s):\n`);
+  for (const orphan of orphans) {
+    console.log(`  ${orphan.fileName} (${orphan.scope})`);
+    console.log(`    Overlay: ${orphan.overlayPath}`);
+    console.log(`    Expected dir: ${orphan.expectedTargetDir}\n`);
+  }
+
+  console.log("Target project:", targetRoot);
+  console.log("Overlay:", overlayRoot);
+  console.log("\nTo fix with an agent, copy this prompt:");
+  console.log("─".repeat(50));
+  console.log(generateAgentPrompt(orphans, targetRoot, overlayRoot));
+  console.log("─".repeat(50));
 }
 
 /** Generate agent prompt for fixing orphaned paths */

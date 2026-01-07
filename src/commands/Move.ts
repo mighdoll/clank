@@ -101,22 +101,6 @@ async function moveSingleFile(
   );
 }
 
-/** Recreate a regular symlink after moving */
-async function recreateSymlink(
-  targetPath: string,
-  overlayPath: string,
-  ctx: MoveContext,
-): Promise<void> {
-  // Remove old symlink if it exists
-  if (await isSymlinkToOverlay(targetPath, ctx.overlayRoot)) {
-    await unlink(targetPath);
-  }
-
-  // Create new symlink
-  const linkTarget = getLinkTarget(targetPath, overlayPath);
-  await createSymlink(linkTarget, targetPath);
-}
-
 /** Recreate agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md) after moving */
 async function recreateAgentLinks(
   normalizedPath: string,
@@ -171,4 +155,20 @@ async function recreatePromptLinks(
       `Updated symlinks: ${created.map((p) => relative(gitRoot, p)).join(", ")}`,
     );
   }
+}
+
+/** Recreate a regular symlink after moving */
+async function recreateSymlink(
+  targetPath: string,
+  overlayPath: string,
+  ctx: MoveContext,
+): Promise<void> {
+  // Remove old symlink if it exists
+  if (await isSymlinkToOverlay(targetPath, ctx.overlayRoot)) {
+    await unlink(targetPath);
+  }
+
+  // Create new symlink
+  const linkTarget = getLinkTarget(targetPath, overlayPath);
+  await createSymlink(linkTarget, targetPath);
 }

@@ -51,6 +51,12 @@ interface LinkedFile {
   scope: Scope;
 }
 
+interface SeparatedMappings {
+  agentsMappings: FileMapping[];
+  promptsMappings: FileMapping[];
+  regularMappings: FileMapping[];
+}
+
 /** Link overlay repository to target directory */
 export async function linkCommand(targetDir?: string): Promise<void> {
   const gitContext = await getGitContext(targetDir || process.cwd());
@@ -89,56 +95,10 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   );
 }
 
-/** Generate VS Code settings if configured */
-async function maybeGenerateVscodeSettings(
-  config: ClankConfig,
-  targetRoot: string,
-): Promise<void> {
-  const setting = config.vscodeSettings ?? "auto";
-
-  if (setting === "never") return;
-
-  if (setting === "auto") {
-    const isVscode = await isVscodeProject(targetRoot);
-    if (!isVscode) return;
-  }
-
-  // setting === "always" or (setting === "auto" && isVscodeProject)
-  console.log("");
-  await generateVscodeSettings(targetRoot);
-}
-
 function logGitContext(ctx: GitContext): void {
   const suffix = ctx.isWorktree ? " (worktree)" : "";
   console.log(`Project: ${ctx.projectName}`);
   console.log(`Branch: ${ctx.worktreeName}${suffix}`);
-}
-
-function logLinkedPaths(files: LinkedFile[]): void {
-  if (files.length === 0) return;
-  console.log(`\nLinked ${files.length} file(s):`);
-  for (const { path, scope } of files) {
-    const suffix = scope === "project" ? "" : ` (${scope})`;
-    console.log(`  ${path}${suffix}`);
-  }
-}
-
-async function warnOrphans(
-  overlayRoot: string,
-  targetRoot: string,
-  projectName: string,
-  ignorePatterns: string[] = [],
-): Promise<void> {
-  const orphans = await findOrphans(
-    overlayRoot,
-    targetRoot,
-    projectName,
-    ignorePatterns,
-  );
-  if (orphans.length > 0) {
-    console.log(`\nWarning: ${orphans.length} orphaned overlay path(s) found.`);
-    console.log("Run 'clank check' for details.");
-  }
 }
 
 /** Check for problematic agent files and error if found */
@@ -166,29 +126,6 @@ async function maybeInitWorktree(
   }
 }
 
-/** Collect all file mappings from global, project, and worktree locations */
-async function overlayMappings(
-  overlayRoot: string,
-  gitContext: GitContext,
-  targetRoot: string,
-  ignorePatterns: string[] = [],
-): Promise<FileMapping[]> {
-  const context: MapperContext = { overlayRoot, targetRoot, gitContext };
-  const overlayGlobal = join(overlayRoot, "global");
-  const overlayProject = overlayProjectDir(overlayRoot, gitContext.projectName);
-
-  return [
-    ...(await dirMappings(overlayGlobal, context, ignorePatterns)),
-    ...(await dirMappings(overlayProject, context, ignorePatterns)),
-  ];
-}
-
-interface SeparatedMappings {
-  agentsMappings: FileMapping[];
-  promptsMappings: FileMapping[];
-  regularMappings: FileMapping[];
-}
-
 /** Collect and separate mappings by type (agents.md and prompts get special handling) */
 async function collectMappings(
   overlayRoot: string,
@@ -214,52 +151,39 @@ async function collectMappings(
   return { agentsMappings, promptsMappings, regularMappings };
 }
 
-async function dirMappings(
-  dir: string,
-  context: MapperContext,
-  ignorePatterns: string[] = [],
-): Promise<FileMapping[]> {
-  if (!(await fileExists(dir))) return [];
-
-  const mappings: FileMapping[] = [];
-  for await (const overlayPath of walkOverlayFiles(dir, ignorePatterns)) {
-    const result = overlayToTarget(overlayPath, context);
-    if (result) {
-      mappings.push({ overlayPath, ...result });
-    }
-  }
-  return mappings;
-}
-
-/** Check if a file is tracked in git (exists as real file, not symlink, and tracked) */
-async function isTrackedFile(path: string, gitRoot: string): Promise<boolean> {
-  if (!(await fileExists(path))) return false;
-  if (await isSymlink(path)) return false;
-  return isTrackedByGit(path, gitRoot);
-}
-
-/** Process a single agents.md mapping into agent symlink paths */
-async function processAgentMapping(
-  mapping: FileMapping,
+/** Create symlinks, handling conflicts with scope suffixes.
+ * Conflicts occur when the same filename exists at multiple scopes (global, project, worktree).
+ * Returns linked files with their scopes. */
+async function createLinks(
+  mappings: FileMapping[],
   targetRoot: string,
-  agents: string[],
-): Promise<{ created: string[]; skipped: string[] }> {
-  const { overlayPath, targetPath } = mapping;
-  const targetDir = dirname(targetPath);
-  const created: string[] = [];
-  const skipped: string[] = [];
+): Promise<LinkedFile[]> {
+  // Filter out subdirectory clank files where parent doesn't exist in target
+  const validMappings = await filterValidMappings(mappings, targetRoot);
 
-  await forEachAgentPath(targetDir, agents, async (agentPath) => {
-    if (await isTrackedFile(agentPath, targetRoot)) {
-      skipped.push(relative(targetRoot, agentPath));
-    } else {
-      const linkTarget = getLinkTarget(agentPath, overlayPath);
-      await createSymlink(linkTarget, agentPath);
-      created.push(relative(targetRoot, agentPath));
-    }
-  });
+  const byTarget = Map.groupBy(validMappings, (m) => m.targetPath);
+  const links = [...byTarget].flatMap(([targetPath, files]) =>
+    resolveLinks(targetPath, files),
+  );
 
-  return { created, skipped };
+  const linkPromises = links.map(({ overlayPath, linkPath }) =>
+    createSymlink(getLinkTarget(linkPath, overlayPath), linkPath),
+  );
+  await Promise.all(linkPromises);
+
+  return links.map(({ linkPath, scope }) => ({
+    path: relative(targetRoot, linkPath),
+    scope,
+  }));
+}
+
+function logLinkedPaths(files: LinkedFile[]): void {
+  if (files.length === 0) return;
+  console.log(`\nLinked ${files.length} file(s):`);
+  for (const { path, scope } of files) {
+    const suffix = scope === "project" ? "" : ` (${scope})`;
+    console.log(`  ${path}${suffix}`);
+  }
 }
 
 /** Create agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md → agents.md) for all agents.md files */
@@ -312,99 +236,6 @@ async function createPromptLinks(
   }
 }
 
-/** Process a single prompt mapping into symlinks for all agent directories */
-async function processPromptMapping(
-  mapping: FileMapping,
-  targetRoot: string,
-): Promise<{ created: string[] }> {
-  const { overlayPath, targetPath } = mapping;
-  const promptRelPath = getPromptRelPath(targetPath);
-  if (!promptRelPath) return { created: [] };
-
-  const createdPaths = await createPromptLinksShared(
-    overlayPath,
-    promptRelPath,
-    targetRoot,
-  );
-  return { created: createdPaths.map((p) => relative(targetRoot, p)) };
-}
-
-/** Create symlinks, handling conflicts with scope suffixes.
- * Conflicts occur when the same filename exists at multiple scopes (global, project, worktree).
- * Returns linked files with their scopes. */
-async function createLinks(
-  mappings: FileMapping[],
-  targetRoot: string,
-): Promise<LinkedFile[]> {
-  // Filter out subdirectory clank files where parent doesn't exist in target
-  const validMappings = await filterValidMappings(mappings, targetRoot);
-
-  const byTarget = Map.groupBy(validMappings, (m) => m.targetPath);
-  const links = [...byTarget].flatMap(([targetPath, files]) =>
-    resolveLinks(targetPath, files),
-  );
-
-  const linkPromises = links.map(({ overlayPath, linkPath }) =>
-    createSymlink(getLinkTarget(linkPath, overlayPath), linkPath),
-  );
-  await Promise.all(linkPromises);
-
-  return links.map(({ linkPath, scope }) => ({
-    path: relative(targetRoot, linkPath),
-    scope,
-  }));
-}
-
-/** Filter mappings to exclude subdirectory clank files where target parent doesn't exist.
- * (we'll warn about these as orphans in 'clank check' and warnOrphans() during link)
- */
-async function filterValidMappings(
-  mappings: FileMapping[],
-  targetRoot: string,
-): Promise<FileMapping[]> {
-  const results = await Promise.all(
-    mappings.map((m) => checkMappingParentExists(m, targetRoot)),
-  );
-  return results.filter((m): m is FileMapping => m !== null);
-}
-
-/** Check if a subdirectory clank file's parent exists in the target */
-async function checkMappingParentExists(
-  m: FileMapping,
-  targetRoot: string,
-): Promise<FileMapping | null> {
-  const relPath = relative(targetRoot, m.targetPath);
-  // Subdirectory clank files have /clank/ in the middle of the path
-  const clankIndex = relPath.indexOf("/clank/");
-  if (clankIndex !== -1) {
-    // Check if parent directory exists (e.g., packages/foo for packages/foo/clank/notes.md)
-    const parentDir = join(targetRoot, relPath.slice(0, clankIndex));
-    if (!(await fileExists(parentDir))) {
-      return null;
-    }
-  }
-  return m;
-}
-
-/** Compute link paths, adding scope suffixes when the same target has multiple sources */
-function resolveLinks(
-  targetPath: string,
-  files: FileMapping[],
-): Array<{ overlayPath: string; linkPath: string; scope: Scope }> {
-  if (files.length === 1) {
-    const { overlayPath, scope } = files[0];
-    return [{ overlayPath, linkPath: targetPath, scope }];
-  }
-  return files.map(({ overlayPath, scope }) => ({
-    overlayPath,
-    linkPath: join(
-      dirname(targetPath),
-      addScopeSuffix(basename(targetPath), scope),
-    ),
-    scope,
-  }));
-}
-
 /** Setup project settings.json - adopt existing or create new */
 async function setupProjectSettings(
   overlayRoot: string,
@@ -451,4 +282,173 @@ async function setupProjectSettings(
   await ensureDir(dirname(targetPath));
   const linkTarget = getLinkTarget(targetPath, overlayPath);
   await createSymlink(linkTarget, targetPath);
+}
+
+/** Generate VS Code settings if configured */
+async function maybeGenerateVscodeSettings(
+  config: ClankConfig,
+  targetRoot: string,
+): Promise<void> {
+  const setting = config.vscodeSettings ?? "auto";
+
+  if (setting === "never") return;
+
+  if (setting === "auto") {
+    const isVscode = await isVscodeProject(targetRoot);
+    if (!isVscode) return;
+  }
+
+  // setting === "always" or (setting === "auto" && isVscodeProject)
+  console.log("");
+  await generateVscodeSettings(targetRoot);
+}
+
+async function warnOrphans(
+  overlayRoot: string,
+  targetRoot: string,
+  projectName: string,
+  ignorePatterns: string[] = [],
+): Promise<void> {
+  const orphans = await findOrphans(
+    overlayRoot,
+    targetRoot,
+    projectName,
+    ignorePatterns,
+  );
+  if (orphans.length > 0) {
+    console.log(`\nWarning: ${orphans.length} orphaned overlay path(s) found.`);
+    console.log("Run 'clank check' for details.");
+  }
+}
+
+/** Collect all file mappings from global, project, and worktree locations */
+async function overlayMappings(
+  overlayRoot: string,
+  gitContext: GitContext,
+  targetRoot: string,
+  ignorePatterns: string[] = [],
+): Promise<FileMapping[]> {
+  const context: MapperContext = { overlayRoot, targetRoot, gitContext };
+  const overlayGlobal = join(overlayRoot, "global");
+  const overlayProject = overlayProjectDir(overlayRoot, gitContext.projectName);
+
+  return [
+    ...(await dirMappings(overlayGlobal, context, ignorePatterns)),
+    ...(await dirMappings(overlayProject, context, ignorePatterns)),
+  ];
+}
+
+/** Filter mappings to exclude subdirectory clank files where target parent doesn't exist.
+ * (we'll warn about these as orphans in 'clank check' and warnOrphans() during link)
+ */
+async function filterValidMappings(
+  mappings: FileMapping[],
+  targetRoot: string,
+): Promise<FileMapping[]> {
+  const results = await Promise.all(
+    mappings.map((m) => checkMappingParentExists(m, targetRoot)),
+  );
+  return results.filter((m): m is FileMapping => m !== null);
+}
+
+/** Compute link paths, adding scope suffixes when the same target has multiple sources */
+function resolveLinks(
+  targetPath: string,
+  files: FileMapping[],
+): Array<{ overlayPath: string; linkPath: string; scope: Scope }> {
+  if (files.length === 1) {
+    const { overlayPath, scope } = files[0];
+    return [{ overlayPath, linkPath: targetPath, scope }];
+  }
+  return files.map(({ overlayPath, scope }) => ({
+    overlayPath,
+    linkPath: join(
+      dirname(targetPath),
+      addScopeSuffix(basename(targetPath), scope),
+    ),
+    scope,
+  }));
+}
+
+/** Process a single agents.md mapping into agent symlink paths */
+async function processAgentMapping(
+  mapping: FileMapping,
+  targetRoot: string,
+  agents: string[],
+): Promise<{ created: string[]; skipped: string[] }> {
+  const { overlayPath, targetPath } = mapping;
+  const targetDir = dirname(targetPath);
+  const created: string[] = [];
+  const skipped: string[] = [];
+
+  await forEachAgentPath(targetDir, agents, async (agentPath) => {
+    if (await isTrackedFile(agentPath, targetRoot)) {
+      skipped.push(relative(targetRoot, agentPath));
+    } else {
+      const linkTarget = getLinkTarget(agentPath, overlayPath);
+      await createSymlink(linkTarget, agentPath);
+      created.push(relative(targetRoot, agentPath));
+    }
+  });
+
+  return { created, skipped };
+}
+
+/** Process a single prompt mapping into symlinks for all agent directories */
+async function processPromptMapping(
+  mapping: FileMapping,
+  targetRoot: string,
+): Promise<{ created: string[] }> {
+  const { overlayPath, targetPath } = mapping;
+  const promptRelPath = getPromptRelPath(targetPath);
+  if (!promptRelPath) return { created: [] };
+
+  const createdPaths = await createPromptLinksShared(
+    overlayPath,
+    promptRelPath,
+    targetRoot,
+  );
+  return { created: createdPaths.map((p) => relative(targetRoot, p)) };
+}
+
+async function dirMappings(
+  dir: string,
+  context: MapperContext,
+  ignorePatterns: string[] = [],
+): Promise<FileMapping[]> {
+  if (!(await fileExists(dir))) return [];
+
+  const mappings: FileMapping[] = [];
+  for await (const overlayPath of walkOverlayFiles(dir, ignorePatterns)) {
+    const result = overlayToTarget(overlayPath, context);
+    if (result) {
+      mappings.push({ overlayPath, ...result });
+    }
+  }
+  return mappings;
+}
+
+/** Check if a subdirectory clank file's parent exists in the target */
+async function checkMappingParentExists(
+  m: FileMapping,
+  targetRoot: string,
+): Promise<FileMapping | null> {
+  const relPath = relative(targetRoot, m.targetPath);
+  // Subdirectory clank files have /clank/ in the middle of the path
+  const clankIndex = relPath.indexOf("/clank/");
+  if (clankIndex !== -1) {
+    // Check if parent directory exists (e.g., packages/foo for packages/foo/clank/notes.md)
+    const parentDir = join(targetRoot, relPath.slice(0, clankIndex));
+    if (!(await fileExists(parentDir))) {
+      return null;
+    }
+  }
+  return m;
+}
+
+/** Check if a file is tracked in git (exists as real file, not symlink, and tracked) */
+async function isTrackedFile(path: string, gitRoot: string): Promise<boolean> {
+  if (!(await fileExists(path))) return false;
+  if (await isSymlink(path)) return false;
+  return isTrackedByGit(path, gitRoot);
 }

@@ -169,22 +169,19 @@ async function parseGitignoreFile(
   result.negationWarnings.push(...parsed.negationWarnings);
 }
 
-/** Parse a single gitignore line */
-function parseLine(
-  trimmed: string,
-  source: string,
-  basePath: string,
-): { pattern?: GitignorePattern; negation?: string } {
-  // Skip empty lines and comments
-  if (!trimmed || trimmed.startsWith("#")) return {};
+/** Find all nested .gitignore files (excluding root) */
+async function findNestedGitignores(targetRoot: string): Promise<string[]> {
+  const gitignores: string[] = [];
+  const rootGitignore = join(targetRoot, ".gitignore");
 
-  const isNegation = trimmed.startsWith("!");
-  const pattern = isNegation ? trimmed.slice(1) : trimmed;
-
-  if (isNegation) {
-    return { negation: pattern };
+  for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
+    if (isDirectory) continue;
+    if (basename(path) === ".gitignore" && path !== rootGitignore) {
+      gitignores.push(path);
+    }
   }
-  return { pattern: { pattern, basePath, negation: false, source } };
+
+  return gitignores;
 }
 
 /** Parse gitignore file content into patterns */
@@ -211,17 +208,20 @@ function parseGitignoreContent(
   return { patterns, negationWarnings };
 }
 
-/** Find all nested .gitignore files (excluding root) */
-async function findNestedGitignores(targetRoot: string): Promise<string[]> {
-  const gitignores: string[] = [];
-  const rootGitignore = join(targetRoot, ".gitignore");
+/** Parse a single gitignore line */
+function parseLine(
+  trimmed: string,
+  source: string,
+  basePath: string,
+): { pattern?: GitignorePattern; negation?: string } {
+  // Skip empty lines and comments
+  if (!trimmed || trimmed.startsWith("#")) return {};
 
-  for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
-    if (isDirectory) continue;
-    if (basename(path) === ".gitignore" && path !== rootGitignore) {
-      gitignores.push(path);
-    }
+  const isNegation = trimmed.startsWith("!");
+  const pattern = isNegation ? trimmed.slice(1) : trimmed;
+
+  if (isNegation) {
+    return { negation: pattern };
   }
-
-  return gitignores;
+  return { pattern: { pattern, basePath, negation: false, source } };
 }

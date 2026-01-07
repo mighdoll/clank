@@ -25,8 +25,6 @@ export interface AgentFileClassification {
   outdatedSymlinks: OutdatedSymlink[];
 }
 
-type PartialClassification = Partial<AgentFileClassification>;
-
 export interface OutdatedSymlink {
   /** Path to the symlink in the target */
   symlinkPath: string;
@@ -37,6 +35,8 @@ export interface OutdatedSymlink {
   /** Where it should point based on current location */
   expectedTarget: string;
 }
+
+type PartialClassification = Partial<AgentFileClassification>;
 
 /** Find all agent files in the repository and classify them.
  * Returns absolute paths in the classification.
@@ -127,6 +127,21 @@ To fix:
   return sections.join("\n\n");
 }
 
+/** Find all agent files in the repository */
+async function findAllAgentFiles(targetRoot: string): Promise<string[]> {
+  const files: string[] = [];
+  const agentFileSet = new Set(agentFiles);
+
+  for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
+    if (isDirectory) continue;
+    if (agentFileSet.has(basename(path))) {
+      files.push(path);
+    }
+  }
+
+  return files;
+}
+
 /** Classify a single agent file */
 async function classifySingleAgentFile(
   filePath: string,
@@ -144,6 +159,18 @@ async function classifySingleAgentFile(
     return isTracked ? { tracked: [filePath] } : { untracked: [filePath] };
   }
   return {};
+}
+
+/** Merge sparse classifications into a complete classification with arrays */
+function mergeClassifications(
+  items: PartialClassification[],
+): AgentFileClassification {
+  return {
+    tracked: items.flatMap((i) => i.tracked ?? []),
+    untracked: items.flatMap((i) => i.untracked ?? []),
+    staleSymlinks: items.flatMap((i) => i.staleSymlinks ?? []),
+    outdatedSymlinks: items.flatMap((i) => i.outdatedSymlinks ?? []),
+  };
 }
 
 /** Classify an agent symlink - check if stale or outdated */
@@ -178,31 +205,4 @@ async function classifyAgentSymlink(
   }
 
   return {};
-}
-
-/** Merge sparse classifications into a complete classification with arrays */
-function mergeClassifications(
-  items: PartialClassification[],
-): AgentFileClassification {
-  return {
-    tracked: items.flatMap((i) => i.tracked ?? []),
-    untracked: items.flatMap((i) => i.untracked ?? []),
-    staleSymlinks: items.flatMap((i) => i.staleSymlinks ?? []),
-    outdatedSymlinks: items.flatMap((i) => i.outdatedSymlinks ?? []),
-  };
-}
-
-/** Find all agent files in the repository */
-async function findAllAgentFiles(targetRoot: string): Promise<string[]> {
-  const files: string[] = [];
-  const agentFileSet = new Set(agentFiles);
-
-  for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
-    if (isDirectory) continue;
-    if (agentFileSet.has(basename(path))) {
-      files.push(path);
-    }
-  }
-
-  return files;
 }

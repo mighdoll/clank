@@ -115,16 +115,6 @@ export function parseRepoName(url: string): string | null {
   return basename(normalizedUrl);
 }
 
-/** Execute a git command and return stdout, or null if it fails */
-async function gitCommand(args: string, cwd?: string): Promise<string | null> {
-  try {
-    const { stdout } = await exec(`git ${args}`, { cwd });
-    return stdout.trim();
-  } catch {
-    return null;
-  }
-}
-
 /** Get the .git directory for the current worktree */
 export async function getGitDir(cwd: string): Promise<string | null> {
   const gitDir = await gitCommand("rev-parse --git-dir", cwd);
@@ -137,4 +127,14 @@ export async function getGitCommonDir(cwd: string): Promise<string | null> {
   const gitDir = await gitCommand("rev-parse --git-common-dir", cwd);
   if (!gitDir) return null;
   return isAbsolute(gitDir) ? gitDir : join(cwd, gitDir);
+}
+
+/** Execute a git command and return stdout, or null if it fails */
+async function gitCommand(args: string, cwd?: string): Promise<string | null> {
+  try {
+    const { stdout } = await exec(`git ${args}`, { cwd });
+    return stdout.trim();
+  } catch {
+    return null;
+  }
 }

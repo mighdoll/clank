@@ -102,15 +102,6 @@ export async function removeGitExcludes(targetRoot: string): Promise<void> {
   console.log("Removed clank entries from .git/info/exclude");
 }
 
-/** Remove the clank section from exclude file content */
-function removeClankSection(content: string): string {
-  const pattern = new RegExp(
-    `\\n*${clankMarkerStart}[\\s\\S]*?${clankMarkerEnd}\\n*`,
-    "g",
-  );
-  return content.replace(pattern, "\n");
-}
-
 /** Filter out clank section from lines */
 export function filterClankLines(lines: string[]): string[] {
   const result: string[] = [];
@@ -127,6 +118,15 @@ export function filterClankLines(lines: string[]): string[] {
     }
   }
   return result;
+}
+
+/** Remove the clank section from exclude file content */
+function removeClankSection(content: string): string {
+  const pattern = new RegExp(
+    `\\n*${clankMarkerStart}[\\s\\S]*?${clankMarkerEnd}\\n*`,
+    "g",
+  );
+  return content.replace(pattern, "\n");
 }
 
 /** Check if a directory has any tracked files */

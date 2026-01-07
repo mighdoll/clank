@@ -12,6 +12,19 @@ export interface ScopeOptions {
   worktree?: boolean;
 }
 
+/** Result of mapping an overlay path to a target path */
+export interface TargetMapping {
+  targetPath: string;
+  scope: Scope;
+}
+
+/** params for mapping from the overlay repo to the target project repo */
+export interface MapperContext {
+  overlayRoot: string;
+  targetRoot: string;
+  gitContext: GitContext;
+}
+
 /** Resolve scope from CLI options
  * @param options - The CLI options
  * @param defaultScope - Default scope if none specified, or "require" to throw
@@ -30,19 +43,6 @@ export function resolveScopeFromOptions(
     );
   }
   return defaultScope;
-}
-
-/** Result of mapping an overlay path to a target path */
-export interface TargetMapping {
-  targetPath: string;
-  scope: Scope;
-}
-
-/** params for mapping from the overlay repo to the target project repo */
-export interface MapperContext {
-  overlayRoot: string;
-  targetRoot: string;
-  gitContext: GitContext;
 }
 
 /** Get overlay path for a project: overlay/targets/{projectName} */
@@ -130,34 +130,6 @@ export function targetToOverlay(
   }
 
   return encodeTargetPath(relPath, overlayBase);
-}
-
-/** Encode a target-relative path to an overlay path */
-function encodeTargetPath(relPath: string, overlayBase: string): string {
-  // agents.md stays at natural path
-  if (basename(relPath) === "agents.md") {
-    return join(overlayBase, relPath);
-  }
-  // .claude/prompts/ and .gemini/prompts/ → prompts/ in overlay (agent-agnostic)
-  for (const agentDir of managedAgentDirs) {
-    const prefix = `${agentDir}/prompts/`;
-    if (relPath.startsWith(prefix)) {
-      return join(overlayBase, "prompts", relPath.slice(prefix.length));
-    }
-  }
-  // .claude/* and .gemini/* → claude/*, gemini/* in overlay (agent-specific)
-  for (const agentDir of managedAgentDirs) {
-    if (relPath.startsWith(`${agentDir}/`)) {
-      const subPath = relPath.slice(agentDir.length + 1);
-      return join(overlayBase, agentDir.slice(1), subPath); // strip leading dot
-    }
-  }
-  // Files with clank/ in path → preserve structure
-  if (isClankPath(relPath)) {
-    return join(overlayBase, relPath);
-  }
-  // Plain files → add clank/ prefix
-  return join(overlayBase, "clank", relPath);
 }
 
 /**
@@ -276,6 +248,64 @@ function mapGlobalOverlay(
   return decodeOverlayPath(relPath, targetRoot, "global");
 }
 
+/** Map project overlay files to target */
+function mapProjectOverlay(
+  overlayPath: string,
+  projectPrefix: string,
+  context: MapperContext,
+): TargetMapping | null {
+  const { targetRoot, gitContext } = context;
+  const relPath = relative(projectPrefix, overlayPath);
+
+  // Worktree-specific files
+  const worktreePrefix = join("worktrees", gitContext.worktreeName);
+  if (relPath.startsWith(`${worktreePrefix}/`)) {
+    const innerPath = relative(worktreePrefix, relPath);
+    return decodeOverlayPath(innerPath, targetRoot, "worktree");
+  }
+
+  // Skip other worktrees
+  if (relPath.startsWith("worktrees/")) return null;
+
+  // Project settings.json (project-only, before shared logic)
+  if (relPath === "claude/settings.json") {
+    return {
+      targetPath: join(targetRoot, ".claude/settings.json"),
+      scope: "project",
+    };
+  }
+
+  return decodeOverlayPath(relPath, targetRoot, "project");
+}
+
+/** Encode a target-relative path to an overlay path */
+function encodeTargetPath(relPath: string, overlayBase: string): string {
+  // agents.md stays at natural path
+  if (basename(relPath) === "agents.md") {
+    return join(overlayBase, relPath);
+  }
+  // .claude/prompts/ and .gemini/prompts/ → prompts/ in overlay (agent-agnostic)
+  for (const agentDir of managedAgentDirs) {
+    const prefix = `${agentDir}/prompts/`;
+    if (relPath.startsWith(prefix)) {
+      return join(overlayBase, "prompts", relPath.slice(prefix.length));
+    }
+  }
+  // .claude/* and .gemini/* → claude/*, gemini/* in overlay (agent-specific)
+  for (const agentDir of managedAgentDirs) {
+    if (relPath.startsWith(`${agentDir}/`)) {
+      const subPath = relPath.slice(agentDir.length + 1);
+      return join(overlayBase, agentDir.slice(1), subPath); // strip leading dot
+    }
+  }
+  // Files with clank/ in path → preserve structure
+  if (isClankPath(relPath)) {
+    return join(overlayBase, relPath);
+  }
+  // Plain files → add clank/ prefix
+  return join(overlayBase, "clank", relPath);
+}
+
 /** Decode an overlay-relative path to target (shared by all scopes) */
 function decodeOverlayPath(
   relPath: string,
@@ -311,34 +341,4 @@ function decodeOverlayPath(
   }
 
   return null;
-}
-
-/** Map project overlay files to target */
-function mapProjectOverlay(
-  overlayPath: string,
-  projectPrefix: string,
-  context: MapperContext,
-): TargetMapping | null {
-  const { targetRoot, gitContext } = context;
-  const relPath = relative(projectPrefix, overlayPath);
-
-  // Worktree-specific files
-  const worktreePrefix = join("worktrees", gitContext.worktreeName);
-  if (relPath.startsWith(`${worktreePrefix}/`)) {
-    const innerPath = relative(worktreePrefix, relPath);
-    return decodeOverlayPath(innerPath, targetRoot, "worktree");
-  }
-
-  // Skip other worktrees
-  if (relPath.startsWith("worktrees/")) return null;
-
-  // Project settings.json (project-only, before shared logic)
-  if (relPath === "claude/settings.json") {
-    return {
-      targetPath: join(targetRoot, ".claude/settings.json"),
-      scope: "project",
-    };
-  }
-
-  return decodeOverlayPath(relPath, targetRoot, "project");
 }

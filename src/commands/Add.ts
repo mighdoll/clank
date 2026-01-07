@@ -32,13 +32,35 @@ import {
 import { createPromptLinks, isSymlinkToOverlay } from "../OverlayLinks.ts";
 import { scopeFromSymlink } from "../ScopeFromSymlink.ts";
 
+export type AddOptions = ScopeOptions;
+
+interface AddContext {
+  cwd: string;
+  gitContext: GitContext;
+  config: { overlayRepo: string; agents: string[] };
+  overlayRoot: string;
+}
+
+/** Create agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md → agents.md) */
+interface AgentLinkParams {
+  overlayPath: string;
+  symlinkDir: string;
+  gitRoot: string;
+  overlayRoot: string;
+  agents: string[];
+}
+
+interface AgentLinkClassification {
+  toCreate: { targetPath: string; name: string }[];
+  existing: string[];
+  skipped: string[];
+}
+
 const scopeLabels: Record<Scope, string> = {
   global: "global",
   project: "project",
   worktree: "worktree",
 };
-
-export type AddOptions = ScopeOptions;
 
 /** Add file(s) to overlay and create symlinks in target */
 export async function addCommand(
@@ -68,11 +90,29 @@ export async function addCommand(
   }
 }
 
-interface AddContext {
-  cwd: string;
-  gitContext: GitContext;
-  config: { overlayRepo: string; agents: string[] };
-  overlayRoot: string;
+/** fail if we can't do an add with the given options */
+async function validateAddOptions(
+  options: AddOptions,
+  overlayRoot: string,
+  gitContext: GitContext,
+): Promise<void> {
+  await validateOverlayExists(overlayRoot);
+
+  if (options.worktree && !gitContext.isWorktree) {
+    throw new Error(
+      `--worktree scope requires a git worktree.\n` +
+        `You're on branch '${gitContext.worktreeName}' in the main repository.\n` +
+        `Use 'git worktree add' to create a worktree, or use --project scope instead.`,
+    );
+  }
+}
+
+async function isDirectory(path: string): Promise<boolean> {
+  try {
+    return (await lstat(path)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /** Add a single file to overlay and create symlink */
@@ -125,6 +165,78 @@ async function addSingleFile(
   }
 }
 
+/** Check if file is already in overlay at a different scope, throw helpful error */
+async function checkScopeConflict(
+  barePath: string,
+  requestedScope: Scope,
+  context: MapperContext,
+  cwd: string,
+): Promise<void> {
+  const currentScope = await scopeFromSymlink(barePath, context);
+  if (currentScope && currentScope !== requestedScope) {
+    const fileName = relative(cwd, barePath);
+    throw new Error(
+      `${fileName} is already in ${scopeLabels[currentScope]} overlay.\n` +
+        `To move it to ${scopeLabels[requestedScope]} scope, use: clank mv ${fileName} --${requestedScope}`,
+    );
+  }
+}
+
+/** Copy a symlink to the overlay, preserving its target */
+async function addSymlinkToOverlay(
+  inputPath: string,
+  overlayPath: string,
+  scopeLabel: string,
+): Promise<void> {
+  const target = await readlink(inputPath);
+  await ensureDir(dirname(overlayPath));
+  await symlink(target, overlayPath);
+  console.log(`Copied symlink ${basename(inputPath)} to ${scopeLabel} overlay`);
+}
+
+/** Copy file content to overlay */
+async function addFileToOverlay(
+  normalizedPath: string,
+  barePath: string,
+  overlayPath: string,
+  scopeLabel: string,
+): Promise<void> {
+  await ensureDir(dirname(overlayPath));
+  const content = await findSourceContent(normalizedPath, barePath);
+  await writeFile(overlayPath, content, "utf-8");
+  const fileName = basename(overlayPath);
+  if (content) {
+    console.log(`Copied ${fileName} to ${scopeLabel} overlay`);
+  } else {
+    console.log(`Created empty ${fileName} in ${scopeLabel} overlay`);
+  }
+}
+
+async function createAgentLinks(p: AgentLinkParams): Promise<void> {
+  const { overlayPath, ...classifyParams } = p;
+  const { toCreate, existing, skipped } =
+    await classifyAgentLinks(classifyParams);
+
+  const promisedLinks = toCreate.map(({ targetPath }) => {
+    const linkTarget = getLinkTarget(targetPath, overlayPath);
+    return createSymlink(linkTarget, targetPath);
+  });
+  await Promise.all(promisedLinks);
+
+  if (toCreate.length) {
+    const created = toCreate.map(({ name }) => name);
+    console.log(`Created symlinks: ${created.join(", ")}`);
+  }
+
+  if (existing.length) {
+    console.log(`Symlinks already exist: ${existing.join(", ")}`);
+  }
+
+  if (skipped.length) {
+    console.log(`Skipped (already tracked in git): ${skipped.join(", ")}`);
+  }
+}
+
 /** Handle prompt file symlink creation */
 async function handlePromptFile(
   normalizedPath: string,
@@ -163,44 +275,6 @@ async function handleRegularFile(
   }
 }
 
-async function isDirectory(path: string): Promise<boolean> {
-  try {
-    return (await lstat(path)).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-/** Copy a symlink to the overlay, preserving its target */
-async function addSymlinkToOverlay(
-  inputPath: string,
-  overlayPath: string,
-  scopeLabel: string,
-): Promise<void> {
-  const target = await readlink(inputPath);
-  await ensureDir(dirname(overlayPath));
-  await symlink(target, overlayPath);
-  console.log(`Copied symlink ${basename(inputPath)} to ${scopeLabel} overlay`);
-}
-
-/** Copy file content to overlay */
-async function addFileToOverlay(
-  normalizedPath: string,
-  barePath: string,
-  overlayPath: string,
-  scopeLabel: string,
-): Promise<void> {
-  await ensureDir(dirname(overlayPath));
-  const content = await findSourceContent(normalizedPath, barePath);
-  await writeFile(overlayPath, content, "utf-8");
-  const fileName = basename(overlayPath);
-  if (content) {
-    console.log(`Copied ${fileName} to ${scopeLabel} overlay`);
-  } else {
-    console.log(`Created empty ${fileName} in ${scopeLabel} overlay`);
-  }
-}
-
 /** Find content from normalized path or bare input path */
 async function findSourceContent(
   normalizedPath: string,
@@ -218,80 +292,6 @@ async function findSourceContent(
     return await readFile(barePath, "utf-8");
   }
   return "";
-}
-
-/** fail if we can't do an add with the given options */
-async function validateAddOptions(
-  options: AddOptions,
-  overlayRoot: string,
-  gitContext: GitContext,
-): Promise<void> {
-  await validateOverlayExists(overlayRoot);
-
-  if (options.worktree && !gitContext.isWorktree) {
-    throw new Error(
-      `--worktree scope requires a git worktree.\n` +
-        `You're on branch '${gitContext.worktreeName}' in the main repository.\n` +
-        `Use 'git worktree add' to create a worktree, or use --project scope instead.`,
-    );
-  }
-}
-
-/** Create agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md → agents.md) */
-interface AgentLinkParams {
-  overlayPath: string;
-  symlinkDir: string;
-  gitRoot: string;
-  overlayRoot: string;
-  agents: string[];
-}
-
-async function createAgentLinks(p: AgentLinkParams): Promise<void> {
-  const { overlayPath, ...classifyParams } = p;
-  const { toCreate, existing, skipped } =
-    await classifyAgentLinks(classifyParams);
-
-  const promisedLinks = toCreate.map(({ targetPath }) => {
-    const linkTarget = getLinkTarget(targetPath, overlayPath);
-    return createSymlink(linkTarget, targetPath);
-  });
-  await Promise.all(promisedLinks);
-
-  if (toCreate.length) {
-    const created = toCreate.map(({ name }) => name);
-    console.log(`Created symlinks: ${created.join(", ")}`);
-  }
-
-  if (existing.length) {
-    console.log(`Symlinks already exist: ${existing.join(", ")}`);
-  }
-
-  if (skipped.length) {
-    console.log(`Skipped (already tracked in git): ${skipped.join(", ")}`);
-  }
-}
-
-/** Check if file is already in overlay at a different scope, throw helpful error */
-async function checkScopeConflict(
-  barePath: string,
-  requestedScope: Scope,
-  context: MapperContext,
-  cwd: string,
-): Promise<void> {
-  const currentScope = await scopeFromSymlink(barePath, context);
-  if (currentScope && currentScope !== requestedScope) {
-    const fileName = relative(cwd, barePath);
-    throw new Error(
-      `${fileName} is already in ${scopeLabels[currentScope]} overlay.\n` +
-        `To move it to ${scopeLabels[requestedScope]} scope, use: clank mv ${fileName} --${requestedScope}`,
-    );
-  }
-}
-
-interface AgentLinkClassification {
-  toCreate: { targetPath: string; name: string }[];
-  existing: string[];
-  skipped: string[];
 }
 
 /** Classify which agent symlinks to create vs skip */

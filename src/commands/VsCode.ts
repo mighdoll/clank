@@ -108,20 +108,18 @@ export async function removeVscodeSettings(targetRoot: string): Promise<void> {
   }
 }
 
-/** Remove patterns from an exclude object, deleting the key if empty */
-function removePatterns(
-  settings: Record<string, unknown>,
-  key: string,
-  patterns: string[],
-): void {
-  const exclude = settings[key] as Record<string, boolean> | undefined;
-  if (!exclude) return;
+/** Check if target directory has VS Code artifacts */
+export async function isVscodeProject(targetRoot: string): Promise<boolean> {
+  // Check for .vscode directory
+  const hasVscodeDir = await fileExists(join(targetRoot, ".vscode"));
+  if (hasVscodeDir) return true;
 
-  for (const pattern of patterns) {
-    delete exclude[pattern];
-  }
-  if (Object.keys(exclude).length === 0) {
-    delete settings[key];
+  // Check for *.code-workspace files
+  try {
+    const files = await readdir(targetRoot);
+    return files.some((f) => f.endsWith(".code-workspace"));
+  } catch {
+    return false;
   }
 }
 
@@ -179,17 +177,19 @@ async function addVscodeToGitExclude(targetRoot: string): Promise<void> {
   await addToGitExclude(targetRoot, ".vscode/settings.json");
 }
 
-/** Check if target directory has VS Code artifacts */
-export async function isVscodeProject(targetRoot: string): Promise<boolean> {
-  // Check for .vscode directory
-  const hasVscodeDir = await fileExists(join(targetRoot, ".vscode"));
-  if (hasVscodeDir) return true;
+/** Remove patterns from an exclude object, deleting the key if empty */
+function removePatterns(
+  settings: Record<string, unknown>,
+  key: string,
+  patterns: string[],
+): void {
+  const exclude = settings[key] as Record<string, boolean> | undefined;
+  if (!exclude) return;
 
-  // Check for *.code-workspace files
-  try {
-    const files = await readdir(targetRoot);
-    return files.some((f) => f.endsWith(".code-workspace"));
-  } catch {
-    return false;
+  for (const pattern of patterns) {
+    delete exclude[pattern];
+  }
+  if (Object.keys(exclude).length === 0) {
+    delete settings[key];
   }
 }

@@ -90,21 +90,30 @@ async function resolveScope(
   return found[0];
 }
 
-/** Search all scopes to find where the file exists */
-async function findInScopes(
+/** Remove agent files (CLAUDE.md, GEMINI.md, AGENTS.md → agents.md) */
+async function removeAgentFiles(
   targetPath: string,
-  context: MapperContext,
-): Promise<Scope[]> {
-  const found: Scope[] = [];
+  overlayPath: string,
+  overlayRoot: string,
+  config: { agents: string[] },
+): Promise<void> {
+  const dir = dirname(targetPath);
+  const removed: string[] = [];
 
-  for (const scope of ["worktree", "project", "global"] as const) {
-    const overlayPath = targetToOverlay(targetPath, scope, context);
-    if (await fileExists(overlayPath)) {
-      found.push(scope);
+  await forEachAgentPath(dir, config.agents, async (linkPath) => {
+    if (await isSymlinkToOverlay(linkPath, overlayRoot)) {
+      await unlink(linkPath);
+      removed.push(basename(linkPath));
     }
+  });
+
+  if (removed.length > 0) {
+    console.log(`Removed symlinks: ${removed.join(", ")}`);
   }
 
-  return found;
+  // Remove agents.md from overlay
+  await rm(overlayPath);
+  console.log(`Removed from overlay: agents.md`);
 }
 
 /** Remove a regular file */
@@ -134,28 +143,19 @@ async function removeFile(
   console.log(`Removed from overlay: ${basename(overlayPath)}`);
 }
 
-/** Remove agent files (CLAUDE.md, GEMINI.md, AGENTS.md → agents.md) */
-async function removeAgentFiles(
+/** Search all scopes to find where the file exists */
+async function findInScopes(
   targetPath: string,
-  overlayPath: string,
-  overlayRoot: string,
-  config: { agents: string[] },
-): Promise<void> {
-  const dir = dirname(targetPath);
-  const removed: string[] = [];
+  context: MapperContext,
+): Promise<Scope[]> {
+  const found: Scope[] = [];
 
-  await forEachAgentPath(dir, config.agents, async (linkPath) => {
-    if (await isSymlinkToOverlay(linkPath, overlayRoot)) {
-      await unlink(linkPath);
-      removed.push(basename(linkPath));
+  for (const scope of ["worktree", "project", "global"] as const) {
+    const overlayPath = targetToOverlay(targetPath, scope, context);
+    if (await fileExists(overlayPath)) {
+      found.push(scope);
     }
-  });
-
-  if (removed.length > 0) {
-    console.log(`Removed symlinks: ${removed.join(", ")}`);
   }
 
-  // Remove agents.md from overlay
-  await rm(overlayPath);
-  console.log(`Removed from overlay: agents.md`);
+  return found;
 }

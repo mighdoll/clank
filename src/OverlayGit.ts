@@ -15,6 +15,28 @@ export async function getOverlayStatus(
   return filterIgnoredLines(allLines, ignorePatterns);
 }
 
+/** Format git status --porcelain output into readable lines */
+export function formatStatusLines(lines: string[]): string[] {
+  return lines.map((line) => {
+    const statusCode = formatStatusCode(line.slice(0, 2));
+    const filePath = line.slice(3);
+    const { scope, pathParts } = parseScopedPath(filePath);
+    const displayPath = shortPath(pathParts);
+    return `${statusCode} ${displayPath} (${scope})`;
+  });
+}
+
+/** Format git status code to single letter */
+export function formatStatusCode(code: string): string {
+  const c = code.trim();
+  if (c === "??") return "A";
+  if (c.includes("D")) return "D";
+  if (c.includes("M")) return "M";
+  if (c.includes("A")) return "A";
+  if (c.includes("R")) return "R";
+  return "?";
+}
+
 /** Filter out lines matching ignore patterns */
 function filterIgnoredLines(
   lines: string[],
@@ -38,28 +60,6 @@ function filterIgnoredLines(
 
     return true;
   });
-}
-
-/** Format git status --porcelain output into readable lines */
-export function formatStatusLines(lines: string[]): string[] {
-  return lines.map((line) => {
-    const statusCode = formatStatusCode(line.slice(0, 2));
-    const filePath = line.slice(3);
-    const { scope, pathParts } = parseScopedPath(filePath);
-    const displayPath = shortPath(pathParts);
-    return `${statusCode} ${displayPath} (${scope})`;
-  });
-}
-
-/** Format git status code to single letter */
-export function formatStatusCode(code: string): string {
-  const c = code.trim();
-  if (c === "??") return "A";
-  if (c.includes("D")) return "D";
-  if (c.includes("M")) return "M";
-  if (c.includes("A")) return "A";
-  if (c.includes("R")) return "R";
-  return "?";
 }
 
 /** Parse overlay path into scope and path parts within that scope */

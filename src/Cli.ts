@@ -93,6 +93,24 @@ function registerCoreCommands(program: Command): void {
   registerUtilityCommands(program);
 }
 
+function registerHelpCommands(program: Command): void {
+  const help = program
+    .command("help")
+    .description("Show help information")
+    .argument("[command]", "Command to show help for")
+    .action((commandName?: string) => {
+      if (!commandName) return program.help();
+      const subcommand = program.commands.find((c) => c.name() === commandName);
+      if (subcommand) return subcommand.help();
+      console.error(`Unknown command: ${commandName}`);
+      process.exit(1);
+    });
+  help
+    .command("structure")
+    .description("Show overlay directory structure")
+    .action(() => console.log(structureHelp));
+}
+
 function registerOverlayCommands(program: Command): void {
   program
     .command("init")
@@ -155,6 +173,59 @@ function registerUtilityCommands(program: Command): void {
     .action(withErrorHandling(vscodeCommand));
 }
 
+function withErrorHandling<T extends unknown[]>(
+  fn: (...args: T) => Promise<void>,
+): (...args: T) => Promise<void> {
+  return async (...args: T) => {
+    try {
+      await fn(...args);
+    } catch (error) {
+      console.error("Error:", error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  };
+}
+
+function registerRmCommand(program: Command): void {
+  program
+    .command("rm")
+    .alias("remove")
+    .description("Remove file(s) from overlay and target")
+    .argument("<files...>", "File(s) to remove")
+    .option("-g, --global", "Remove from global scope")
+    .option("-p, --project", "Remove from project scope")
+    .option("-w, --worktree", "Remove from worktree scope")
+    .action(withErrorHandling(rmCommand));
+}
+
+function registerMvCommand(program: Command): void {
+  const cmd = program
+    .command("mv")
+    .alias("move")
+    .description("Move file(s) between overlay scopes")
+    .argument("<files...>", "File(s) to move");
+
+  cmd.addOption(
+    new Option("-g, --global", "Move to global scope").conflicts([
+      "project",
+      "worktree",
+    ]),
+  );
+  cmd.addOption(
+    new Option("-p, --project", "Move to project scope").conflicts([
+      "global",
+      "worktree",
+    ]),
+  );
+  cmd.addOption(
+    new Option("-w, --worktree", "Move to worktree scope").conflicts([
+      "global",
+      "project",
+    ]),
+  );
+  cmd.action(withErrorHandling(moveCommand));
+}
+
 function registerFilesCommand(program: Command): void {
   const files = program
     .command("files")
@@ -201,75 +272,4 @@ function registerFilesCommand(program: Command): void {
   );
 
   files.action(withErrorHandling(filesCommand));
-}
-
-function registerHelpCommands(program: Command): void {
-  const help = program
-    .command("help")
-    .description("Show help information")
-    .argument("[command]", "Command to show help for")
-    .action((commandName?: string) => {
-      if (!commandName) return program.help();
-      const subcommand = program.commands.find((c) => c.name() === commandName);
-      if (subcommand) return subcommand.help();
-      console.error(`Unknown command: ${commandName}`);
-      process.exit(1);
-    });
-  help
-    .command("structure")
-    .description("Show overlay directory structure")
-    .action(() => console.log(structureHelp));
-}
-
-function registerRmCommand(program: Command): void {
-  program
-    .command("rm")
-    .alias("remove")
-    .description("Remove file(s) from overlay and target")
-    .argument("<files...>", "File(s) to remove")
-    .option("-g, --global", "Remove from global scope")
-    .option("-p, --project", "Remove from project scope")
-    .option("-w, --worktree", "Remove from worktree scope")
-    .action(withErrorHandling(rmCommand));
-}
-
-function registerMvCommand(program: Command): void {
-  const cmd = program
-    .command("mv")
-    .alias("move")
-    .description("Move file(s) between overlay scopes")
-    .argument("<files...>", "File(s) to move");
-
-  cmd.addOption(
-    new Option("-g, --global", "Move to global scope").conflicts([
-      "project",
-      "worktree",
-    ]),
-  );
-  cmd.addOption(
-    new Option("-p, --project", "Move to project scope").conflicts([
-      "global",
-      "worktree",
-    ]),
-  );
-  cmd.addOption(
-    new Option("-w, --worktree", "Move to worktree scope").conflicts([
-      "global",
-      "project",
-    ]),
-  );
-  cmd.action(withErrorHandling(moveCommand));
-}
-
-function withErrorHandling<T extends unknown[]>(
-  fn: (...args: T) => Promise<void>,
-): (...args: T) => Promise<void> {
-  return async (...args: T) => {
-    try {
-      await fn(...args);
-    } catch (error) {
-      console.error("Error:", error instanceof Error ? error.message : error);
-      process.exit(1);
-    }
-  };
 }

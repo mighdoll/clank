@@ -4,8 +4,6 @@ import { join } from "node:path";
 import { cosmiconfig } from "cosmiconfig";
 import { fileExists } from "./FsUtil.ts";
 
-export const defaultOverlayDir = "clankover";
-
 export interface ClankConfig {
   overlayRepo: string;
   agents: string[];
@@ -16,6 +14,8 @@ export interface ClankConfig {
   /** Patterns to ignore when walking overlay (e.g., [".obsidian", "*.bak"]) */
   ignore?: string[];
 }
+
+export const defaultOverlayDir = "clankover";
 
 const defaultConfig: ClankConfig = {
   overlayRepo: join(homedir(), defaultOverlayDir),
@@ -81,12 +81,6 @@ export async function getOverlayPath(): Promise<string> {
   return expandPath(config.overlayRepo);
 }
 
-/** Get the XDG config directory (respects XDG_CONFIG_HOME, defaults to ~/.config/clank) */
-function getConfigDir(): string {
-  const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-  return join(xdgConfig, "clank");
-}
-
 /** Validate overlay repository exists, throw if not */
 export async function validateOverlayExists(
   overlayRoot: string,
@@ -96,4 +90,10 @@ export async function validateOverlayExists(
       `Overlay repository not found at ${overlayRoot}\nRun 'clank init' to create it`,
     );
   }
+}
+
+/** Get the XDG config directory (respects XDG_CONFIG_HOME, defaults to ~/.config/clank) */
+function getConfigDir(): string {
+  const xdgConfig = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  return join(xdgConfig, "clank");
 }
