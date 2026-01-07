@@ -1,4 +1,5 @@
 import { basename, join, relative } from "node:path";
+import picomatch from "picomatch";
 import { managedDirs, targetManagedDirs } from "../AgentFiles.ts";
 import {
   agentFileProblems,
@@ -35,10 +36,11 @@ export async function checkCommand(): Promise<void> {
   const overlayRoot = expandPath(config.overlayRepo);
   const { gitRoot: targetRoot } = gitContext;
   const ctx: MapperContext = { overlayRoot, targetRoot, gitContext };
+  const ignorePatterns = config.ignore ?? [];
 
-  await showOverlayStatus(overlayRoot);
+  await showOverlayStatus(overlayRoot, ignorePatterns);
 
-  const problems = await checkAllProblems(ctx, cwd);
+  const problems = await checkAllProblems(ctx, cwd, ignorePatterns);
   if (!problems) {
     console.log("No issues found. Overlay matches target structure.");
   }
@@ -48,6 +50,7 @@ export async function checkCommand(): Promise<void> {
 async function checkAllProblems(
   ctx: MapperContext,
   cwd: string,
+  ignorePatterns: string[] = [],
 ): Promise<boolean> {
   const { overlayRoot, targetRoot, gitContext } = ctx;
   let hasProblems = false;
@@ -73,6 +76,7 @@ async function checkAllProblems(
     overlayRoot,
     targetRoot,
     gitContext.projectName,
+    ignorePatterns,
   );
   if (orphans.length > 0) {
     hasProblems = true;
@@ -104,13 +108,16 @@ function showOrphanedPaths(
 }
 
 /** Show git status of the overlay repository */
-async function showOverlayStatus(overlayRoot: string): Promise<void> {
+async function showOverlayStatus(
+  overlayRoot: string,
+  ignorePatterns: string[] = [],
+): Promise<void> {
   if (!(await fileExists(overlayRoot))) {
     console.log("Overlay repository not found\n");
     return;
   }
 
-  const { lines } = await getOverlayStatus(overlayRoot);
+  const lines = await getOverlayStatus(overlayRoot, ignorePatterns);
 
   console.log(`Overlay: ${overlayRoot}`);
 
@@ -224,6 +231,7 @@ export async function findOrphans(
   overlayRoot: string,
   targetRoot: string,
   projectName: string,
+  ignorePatterns: string[] = [],
 ): Promise<OrphanedPath[]> {
   const orphans: OrphanedPath[] = [];
   const projectDir = overlayProjectDir(overlayRoot, projectName);
@@ -232,8 +240,20 @@ export async function findOrphans(
     return orphans;
   }
 
+  const isIgnored =
+    ignorePatterns.length > 0 ? picomatch(ignorePatterns) : null;
+
+  const skip = (relPath: string): boolean => {
+    if (isIgnored) {
+      const pathBasename = relPath.split("/").at(-1) ?? "";
+      if (isIgnored(relPath) || isIgnored(pathBasename)) return true;
+    }
+    return false;
+  };
+
   for await (const { path, isDirectory } of walkDirectory(projectDir, {
     skipDirs: [".git", "node_modules", "worktrees"],
+    skip,
   })) {
     if (isDirectory) continue;
 

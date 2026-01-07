@@ -1,16 +1,43 @@
 import { execa } from "execa";
+import picomatch from "picomatch";
 import { managedDirs } from "./AgentFiles.ts";
 
 /** Get git status of the overlay repository */
 export async function getOverlayStatus(
   overlayRoot: string,
-): Promise<{ lines: string[]; raw: string }> {
+  ignorePatterns: string[] = [],
+): Promise<string[]> {
   const { stdout } = await execa({
     cwd: overlayRoot,
   })`git status --porcelain -uall`;
 
-  const lines = stdout.trimEnd() ? stdout.trimEnd().split("\n") : [];
-  return { lines, raw: stdout };
+  const allLines = stdout.trimEnd() ? stdout.trimEnd().split("\n") : [];
+  return filterIgnoredLines(allLines, ignorePatterns);
+}
+
+/** Filter out lines matching ignore patterns */
+function filterIgnoredLines(
+  lines: string[],
+  ignorePatterns: string[],
+): string[] {
+  if (ignorePatterns.length === 0) return lines;
+
+  const isIgnored = picomatch(ignorePatterns);
+  return lines.filter((line) => {
+    const filePath = line.slice(3); // Skip status code + space
+    const segments = filePath.split("/");
+    const pathBasename = segments.at(-1) ?? "";
+
+    // Check full path and basename
+    if (isIgnored(filePath) || isIgnored(pathBasename)) return false;
+
+    // Check each directory segment (for patterns like ".obsidian")
+    for (const segment of segments) {
+      if (isIgnored(segment)) return false;
+    }
+
+    return true;
+  });
 }
 
 /** Format git status --porcelain output into readable lines */

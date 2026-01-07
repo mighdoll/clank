@@ -18,7 +18,7 @@ export async function commitCommand(
   const message = options.message || "update";
   const fullMessage = `[clank] ${message}`;
 
-  const { lines } = await getOverlayStatus(overlayRoot);
+  const lines = await getOverlayStatus(overlayRoot);
 
   if (lines.length === 0) {
     console.log("Nothing to commit");

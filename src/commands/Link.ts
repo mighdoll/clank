@@ -97,7 +97,7 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   await setupProjectSettings(overlayRoot, gitContext, targetRoot);
   await addGitExcludes(targetRoot);
   await maybeGenerateVscodeSettings(config, targetRoot);
-  await warnOrphans(overlayRoot, targetRoot, gitContext.projectName);
+  await warnOrphans(overlayRoot, targetRoot, gitContext.projectName, ignorePatterns);
 }
 
 /** Generate VS Code settings if configured */
@@ -138,8 +138,14 @@ async function warnOrphans(
   overlayRoot: string,
   targetRoot: string,
   projectName: string,
+  ignorePatterns: string[] = [],
 ): Promise<void> {
-  const orphans = await findOrphans(overlayRoot, targetRoot, projectName);
+  const orphans = await findOrphans(
+    overlayRoot,
+    targetRoot,
+    projectName,
+    ignorePatterns,
+  );
   if (orphans.length > 0) {
     console.log(`\nWarning: ${orphans.length} orphaned overlay path(s) found.`);
     console.log("Run 'clank check' for details.");
