@@ -30,14 +30,11 @@ export function setConfigPath(path: string | undefined): void {
   customConfigPath = path;
 }
 
-/** Load global clank configuration from ~/.config/clank/config.js or similar */
+/** Load global clank configuration from ~/.config/clank/clank.config.js or similar */
 export async function loadConfig(): Promise<ClankConfig> {
   if (customConfigPath) {
     const result = await explorer.load(customConfigPath);
-    if (!result) {
-      throw new Error(`Config file not found: ${customConfigPath}`);
-    }
-    if (result.isEmpty) {
+    if (!result || result.isEmpty) {
       return defaultConfig;
     }
     return { ...defaultConfig, ...result.config };
@@ -50,10 +47,10 @@ export async function loadConfig(): Promise<ClankConfig> {
   return { ...defaultConfig, ...result.config };
 }
 
-/** Create default configuration file at ~/.config/clank/config.js */
+/** Create default configuration file at ~/.config/clank/clank.config.js */
 export async function createDefaultConfig(overlayRepo?: string): Promise<void> {
   const configDir = getConfigDir();
-  const configPath = customConfigPath || join(configDir, "config.js");
+  const configPath = customConfigPath || join(configDir, "clank.config.js");
 
   const config = {
     ...defaultConfig,

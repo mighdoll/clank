@@ -205,7 +205,7 @@ clank help structure
 
 ### `--config <path>` (global option)
 
-Specify a custom config file location (default `~/.config/clank/config.js`).
+Specify a custom config file location (default `~/.config/clank/clank.config.js`).
 
 ```bash
 clank --config /tmp/test-config.js init /tmp/test-overlay
@@ -243,7 +243,7 @@ clank/
 
 ## Configuration
 
-Global configuration is stored by default in `~/.config/clank/config.js`:
+Global configuration is stored in `~/.config/clank/clank.config.js`:
 
 ```javascript
 export default {
