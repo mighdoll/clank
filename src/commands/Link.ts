@@ -68,25 +68,9 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   await ensureDir(join(overlayRoot, "targets", gitContext.projectName));
   await maybeInitWorktree(overlayRoot, gitContext);
 
-  // Collect and separate mappings (agents.md and prompts get special handling)
   const ignorePatterns = config.ignore ?? [];
-  const mappings = await overlayMappings(
-    overlayRoot,
-    gitContext,
-    targetRoot,
-    ignorePatterns,
-  );
-  const agentsMappings = mappings.filter(
-    (m) => basename(m.targetPath) === "agents.md",
-  );
-  const promptsMappings = mappings.filter((m) =>
-    m.targetPath.includes("/.claude/prompts/"),
-  );
-  const regularMappings = mappings.filter(
-    (m) =>
-      basename(m.targetPath) !== "agents.md" &&
-      !m.targetPath.includes("/.claude/prompts/"),
-  );
+  const { agentsMappings, promptsMappings, regularMappings } =
+    await collectMappings(overlayRoot, gitContext, targetRoot, ignorePatterns);
 
   // Create symlinks
   const linkedPaths = await createLinks(regularMappings, targetRoot);
@@ -97,7 +81,12 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   await setupProjectSettings(overlayRoot, gitContext, targetRoot);
   await addGitExcludes(targetRoot);
   await maybeGenerateVscodeSettings(config, targetRoot);
-  await warnOrphans(overlayRoot, targetRoot, gitContext.projectName, ignorePatterns);
+  await warnOrphans(
+    overlayRoot,
+    targetRoot,
+    gitContext.projectName,
+    ignorePatterns,
+  );
 }
 
 /** Generate VS Code settings if configured */
@@ -192,6 +181,40 @@ async function overlayMappings(
     ...(await dirMappings(overlayGlobal, context, ignorePatterns)),
     ...(await dirMappings(overlayProject, context, ignorePatterns)),
   ];
+}
+
+interface SeparatedMappings {
+  agentsMappings: FileMapping[];
+  promptsMappings: FileMapping[];
+  regularMappings: FileMapping[];
+}
+
+/** Collect and separate mappings by type (agents.md and prompts get special handling) */
+async function collectMappings(
+  overlayRoot: string,
+  gitContext: GitContext,
+  targetRoot: string,
+  ignorePatterns: string[],
+): Promise<SeparatedMappings> {
+  const mappings = await overlayMappings(
+    overlayRoot,
+    gitContext,
+    targetRoot,
+    ignorePatterns,
+  );
+  return {
+    agentsMappings: mappings.filter(
+      (m) => basename(m.targetPath) === "agents.md",
+    ),
+    promptsMappings: mappings.filter((m) =>
+      m.targetPath.includes("/.claude/prompts/"),
+    ),
+    regularMappings: mappings.filter(
+      (m) =>
+        basename(m.targetPath) !== "agents.md" &&
+        !m.targetPath.includes("/.claude/prompts/"),
+    ),
+  };
 }
 
 async function dirMappings(
