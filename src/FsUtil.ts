@@ -1,3 +1,4 @@
+import type { Dirent } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -10,6 +11,22 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { execFileAsync } from "./Exec.ts";
+
+export interface WalkOptions {
+  /** Directories to skip (default: [".git", "node_modules"]) */
+  skipDirs?: string[];
+  /** Include dot-prefixed directories (default: true) */
+  includeHiddenDirs?: boolean;
+  /** Skip entries matching this predicate (checked before recursing into directories) */
+  skip?: (relPath: string, isDirectory: boolean) => boolean;
+}
+
+interface WalkContext {
+  root: string;
+  skipDirs: string[];
+  includeHidden: boolean;
+  skip?: (relPath: string, isDirectory: boolean) => boolean;
+}
 
 /**
  * Create a symbolic link, removing existing link/file first
@@ -53,42 +70,30 @@ export function getLinkTarget(_from: string, to: string): string {
   return to;
 }
 
-export interface WalkOptions {
-  /** Directories to skip (default: [".git", "node_modules"]) */
-  skipDirs?: string[];
-  /** Include dot-prefixed directories (default: true) */
-  includeHiddenDirs?: boolean;
-}
-
 /** Recursively walk a directory, yielding all files and directories */
 export async function* walkDirectory(
   dir: string,
   options: WalkOptions = {},
+  rootDir?: string,
 ): AsyncGenerator<{ path: string; isDirectory: boolean }> {
-  const skipDirs = options.skipDirs ?? [".git", "node_modules"];
-  const includeHidden = options.includeHiddenDirs ?? true;
+  const ctx: WalkContext = {
+    root: rootDir ?? dir,
+    skipDirs: options.skipDirs ?? [".git", "node_modules"],
+    includeHidden: options.includeHiddenDirs ?? true,
+    skip: options.skip,
+  };
 
-  try {
-    const entries = await readdir(dir, { withFileTypes: true });
+  const entries = await tryReadDir(dir);
+  if (!entries) return;
 
-    for (const entry of entries) {
-      if (skipDirs.includes(entry.name)) continue;
-      if (entry.isDirectory() && !includeHidden && entry.name.startsWith(".")) {
-        continue;
-      }
-
-      const fullPath = join(dir, entry.name);
-
-      if (entry.isDirectory()) {
-        yield { path: fullPath, isDirectory: true };
-        yield* walkDirectory(fullPath, options);
-      } else if (entry.isFile() || entry.isSymbolicLink()) {
-        yield { path: fullPath, isDirectory: false };
+  for (const entry of entries) {
+    for (const result of processEntry(entry, dir, ctx)) {
+      if ("recurse" in result) {
+        yield* walkDirectory(result.recurse, result.options, result.root);
+      } else {
+        yield result;
       }
     }
-  } catch (_error) {
-    // Directory doesn't exist or can't be read
-    return;
   }
 }
 
@@ -171,4 +176,50 @@ export async function writeJsonFile(
   data: unknown,
 ): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function tryReadDir(dir: string): Promise<Dirent[] | null> {
+  try {
+    return await readdir(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+}
+
+function* processEntry(
+  entry: Dirent,
+  dir: string,
+  ctx: WalkContext,
+): Generator<
+  | { path: string; isDirectory: boolean }
+  | { recurse: string; options: WalkOptions; root: string }
+> {
+  const fullPath = join(dir, entry.name);
+  const relPath = relative(ctx.root, fullPath);
+
+  if (entry.isDirectory()) {
+    if (shouldSkipDir(entry.name, ctx.skipDirs, ctx.includeHidden)) return;
+    if (ctx.skip?.(relPath, true)) return;
+    yield { path: fullPath, isDirectory: true };
+    yield {
+      recurse: fullPath,
+      options: {
+        skipDirs: ctx.skipDirs,
+        includeHiddenDirs: ctx.includeHidden,
+        skip: ctx.skip,
+      },
+      root: ctx.root,
+    };
+  } else if (entry.isFile() || entry.isSymbolicLink()) {
+    if (ctx.skip?.(relPath, false)) return;
+    yield { path: fullPath, isDirectory: false };
+  }
+}
+
+function shouldSkipDir(
+  name: string,
+  skipDirs: string[],
+  includeHidden: boolean,
+): boolean {
+  return skipDirs.includes(name) || (!includeHidden && name.startsWith("."));
 }

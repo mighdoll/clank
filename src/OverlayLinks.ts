@@ -1,5 +1,6 @@
 import { lstat } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, join } from "node:path";
+import picomatch from "picomatch";
 import { managedAgentDirs } from "./AgentFiles.ts";
 import {
   createSymlink,
@@ -73,16 +74,6 @@ export async function verifyManaged(
   }
 }
 
-/** Check if two paths are equivalent prompt files in different agent directories */
-function isMatchingPromptPath(
-  canonicalPath: string,
-  actualPath: string,
-): boolean {
-  const canonicalPrompt = getPromptRelPath(canonicalPath);
-  const actualPrompt = getPromptRelPath(actualPath);
-  return canonicalPrompt !== null && canonicalPrompt === actualPrompt;
-}
-
 /** Check if a path is a symlink pointing to the overlay repository */
 export async function isSymlinkToOverlay(
   linkPath: string,
@@ -104,15 +95,25 @@ export async function isSymlinkToOverlay(
 /** Walk overlay directory and yield all files that should be linked (excludes init/ templates) */
 export async function* walkOverlayFiles(
   overlayRoot: string,
+  ignorePatterns: string[] = [],
 ): AsyncGenerator<string> {
-  for await (const { path, isDirectory } of walkDirectory(overlayRoot, {
-    skipDirs: [".git", "node_modules"],
-  })) {
+  const isIgnored =
+    ignorePatterns.length > 0 ? picomatch(ignorePatterns) : null;
+
+  const skip = (relPath: string): boolean => {
+    // Skip templates
+    if (relPath.startsWith("clank/init/")) return true;
+    // Check ignore patterns against relative path and basename
+    if (isIgnored) {
+      const basename = relPath.split("/").at(-1) ?? "";
+      if (isIgnored(relPath) || isIgnored(basename)) return true;
+    }
+    return false;
+  };
+
+  const genEntries = walkDirectory(overlayRoot, { skip });
+  for await (const { path, isDirectory } of genEntries) {
     if (isDirectory) continue;
-
-    const relPath = relative(overlayRoot, path);
-    if (relPath.startsWith("clank/init/")) continue;
-
     yield path;
   }
 }
@@ -132,4 +133,14 @@ export async function createPromptLinks(
     created.push(targetPath);
   }
   return created;
+}
+
+/** Check if two paths are equivalent prompt files in different agent directories */
+function isMatchingPromptPath(
+  canonicalPath: string,
+  actualPath: string,
+): boolean {
+  const canonicalPrompt = getPromptRelPath(canonicalPath);
+  const actualPrompt = getPromptRelPath(actualPath);
+  return canonicalPrompt !== null && canonicalPrompt === actualPrompt;
 }

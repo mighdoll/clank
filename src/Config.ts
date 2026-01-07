@@ -13,6 +13,8 @@ export interface ClankConfig {
   vscodeSettings?: "auto" | "always" | "never";
   /** Add .vscode/settings.json to .git/info/exclude (default: true) */
   vscodeGitignore?: boolean;
+  /** Patterns to ignore when walking overlay (e.g., [".obsidian", "*.bak"]) */
+  ignore?: string[];
 }
 
 const defaultConfig: ClankConfig = {

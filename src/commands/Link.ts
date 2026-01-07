@@ -69,7 +69,13 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   await maybeInitWorktree(overlayRoot, gitContext);
 
   // Collect and separate mappings (agents.md and prompts get special handling)
-  const mappings = await overlayMappings(overlayRoot, gitContext, targetRoot);
+  const ignorePatterns = config.ignore ?? [];
+  const mappings = await overlayMappings(
+    overlayRoot,
+    gitContext,
+    targetRoot,
+    ignorePatterns,
+  );
   const agentsMappings = mappings.filter(
     (m) => basename(m.targetPath) === "agents.md",
   );
@@ -170,25 +176,27 @@ async function overlayMappings(
   overlayRoot: string,
   gitContext: GitContext,
   targetRoot: string,
+  ignorePatterns: string[] = [],
 ): Promise<FileMapping[]> {
   const context: MapperContext = { overlayRoot, targetRoot, gitContext };
   const overlayGlobal = join(overlayRoot, "global");
   const overlayProject = overlayProjectDir(overlayRoot, gitContext.projectName);
 
   return [
-    ...(await dirMappings(overlayGlobal, context)),
-    ...(await dirMappings(overlayProject, context)),
+    ...(await dirMappings(overlayGlobal, context, ignorePatterns)),
+    ...(await dirMappings(overlayProject, context, ignorePatterns)),
   ];
 }
 
 async function dirMappings(
   dir: string,
   context: MapperContext,
+  ignorePatterns: string[] = [],
 ): Promise<FileMapping[]> {
   if (!(await fileExists(dir))) return [];
 
   const mappings: FileMapping[] = [];
-  for await (const overlayPath of walkOverlayFiles(dir)) {
+  for await (const overlayPath of walkOverlayFiles(dir, ignorePatterns)) {
     const result = overlayToTarget(overlayPath, context);
     if (result) {
       mappings.push({ overlayPath, ...result });
