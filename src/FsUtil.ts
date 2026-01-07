@@ -53,18 +53,29 @@ export function getLinkTarget(_from: string, to: string): string {
   return to;
 }
 
+export interface WalkOptions {
+  /** Directories to skip (default: [".git", "node_modules"]) */
+  skipDirs?: string[];
+  /** Include dot-prefixed directories (default: true) */
+  includeHiddenDirs?: boolean;
+}
+
 /** Recursively walk a directory, yielding all files and directories */
 export async function* walkDirectory(
   dir: string,
-  options: { skipDirs?: string[] } = {},
+  options: WalkOptions = {},
 ): AsyncGenerator<{ path: string; isDirectory: boolean }> {
-  const skipDirs = options.skipDirs || [".git", "node_modules"];
+  const skipDirs = options.skipDirs ?? [".git", "node_modules"];
+  const includeHidden = options.includeHiddenDirs ?? true;
 
   try {
     const entries = await readdir(dir, { withFileTypes: true });
 
     for (const entry of entries) {
       if (skipDirs.includes(entry.name)) continue;
+      if (entry.isDirectory() && !includeHidden && entry.name.startsWith(".")) {
+        continue;
+      }
 
       const fullPath = join(dir, entry.name);
 

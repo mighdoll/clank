@@ -4,6 +4,7 @@ import { defaultOverlayDir, setConfigPath } from "./Config.ts";
 import { addCommand } from "./commands/Add.ts";
 import { checkCommand } from "./commands/Check.ts";
 import { commitCommand } from "./commands/Commit.ts";
+import { filesCommand } from "./commands/Files.ts";
 import { initCommand } from "./commands/Init.ts";
 import { linkCommand } from "./commands/Link.ts";
 import { moveCommand } from "./commands/Move.ts";
@@ -145,11 +146,60 @@ function registerUtilityCommands(program: Command): void {
     .description("Show overlay status and check for issues")
     .action(withErrorHandling(checkCommand));
 
+  registerFilesCommand(program);
+
   program
     .command("vscode")
     .description("Generate VS Code settings to show clank files")
     .option("--remove", "Remove clank-generated VS Code settings")
     .action(withErrorHandling(vscodeCommand));
+}
+
+function registerFilesCommand(program: Command): void {
+  const files = program
+    .command("files")
+    .description("List clank-managed files (paths relative to cwd)")
+    .argument(
+      "[path]",
+      "Limit to this directory/subtree (relative to cwd; default: repo root)",
+    )
+    .option("--hidden", "Include files under dot-prefixed directories")
+    .option("--depth <n>", "Max depth under clank/ directories")
+    .option("-0, --null", "NUL-separate output paths")
+    .option("--no-dedupe", "Disable deduplication");
+
+  files.addOption(
+    new Option(
+      "-g, --global",
+      "Only include linked files from global scope",
+    ).conflicts(["project", "worktree"]),
+  );
+  files.addOption(
+    new Option(
+      "-p, --project",
+      "Only include linked files from project scope",
+    ).conflicts(["global", "worktree"]),
+  );
+  files.addOption(
+    new Option(
+      "-w, --worktree",
+      "Only include linked files from worktree scope",
+    ).conflicts(["global", "project"]),
+  );
+  files.addOption(
+    new Option(
+      "--linked-only",
+      "Only include symlinks into the overlay",
+    ).conflicts(["unlinkedOnly"]),
+  );
+  files.addOption(
+    new Option(
+      "--unlinked-only",
+      "Only include non-overlay files/symlinks",
+    ).conflicts(["linkedOnly"]),
+  );
+
+  files.action(withErrorHandling(filesCommand));
 }
 
 function registerHelpCommands(program: Command): void {
@@ -158,16 +208,11 @@ function registerHelpCommands(program: Command): void {
     .description("Show help information")
     .argument("[command]", "Command to show help for")
     .action((commandName?: string) => {
-      if (!commandName) {
-        program.help();
-      }
+      if (!commandName) return program.help();
       const subcommand = program.commands.find((c) => c.name() === commandName);
-      if (subcommand) {
-        subcommand.help();
-      } else {
-        console.error(`Unknown command: ${commandName}`);
-        process.exit(1);
-      }
+      if (subcommand) return subcommand.help();
+      console.error(`Unknown command: ${commandName}`);
+      process.exit(1);
     });
   help
     .command("structure")

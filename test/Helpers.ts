@@ -66,9 +66,8 @@ export async function setupTestEnvironment(): Promise<TestContext> {
 
   // Initialize git repo in target
   await execa({ cwd: targetDir })`git init`;
-  await execa({
-    cwd: targetDir,
-  })`git remote add origin https://github.com/test/my-project.git`;
+  const remoteUrl = "https://github.com/test/my-project.git";
+  await execa({ cwd: targetDir })`git remote add origin ${remoteUrl}`;
 
   // Need at least one commit for git branch to work
   await writeFile(join(targetDir, ".gitkeep"), "", "utf-8");
@@ -122,4 +121,14 @@ export async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Write a file, creating parent directories as needed */
+export async function writeFileWithDir(
+  path: string,
+  content: string,
+): Promise<void> {
+  const { dirname } = await import("node:path");
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, content, "utf-8");
 }

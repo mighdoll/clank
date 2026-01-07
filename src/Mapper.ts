@@ -153,7 +153,7 @@ function encodeTargetPath(relPath: string, overlayBase: string): string {
     }
   }
   // Files with clank/ in path → preserve structure
-  if (relPath.includes("clank/")) {
+  if (isClankPath(relPath)) {
     return join(overlayBase, relPath);
   }
   // Plain files → add clank/ prefix
@@ -217,6 +217,11 @@ export function normalizeAddPath(
   return join(normalizedCwd, "clank", filename);
 }
 
+/** Check if a relative path contains a clank/ directory component */
+export function isClankPath(relPath: string): boolean {
+  return relPath.startsWith("clank/") || relPath.includes("/clank/");
+}
+
 /** Check if a filename is an agent file (CLAUDE.md, GEMINI.md, AGENTS.md) */
 export function isAgentFile(filename: string): boolean {
   const name = basename(filename).toLowerCase();
@@ -278,7 +283,7 @@ function decodeOverlayPath(
   scope: Scope,
 ): TargetMapping | null {
   // clank/ files (at root or in subdirectories)
-  if (relPath.startsWith("clank/") || relPath.includes("/clank/")) {
+  if (isClankPath(relPath)) {
     return { targetPath: join(targetRoot, relPath), scope };
   }
 

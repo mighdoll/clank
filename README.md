@@ -8,6 +8,7 @@ Common commands:
 - **`clank link`** to connect overlay files to your project.
 - **`clank commit`** to commit changes in the overlay repository.
 - **`clank check`** to show overlay status and find misaligned files.
+- **`clank files`** to list clank-managed files for piping into tools like `rg`.
 
 ## Why a Separate Repository?
 
@@ -137,6 +138,29 @@ clank check
 # The following overlay files no longer match...
 ```
 
+### `clank files [path]`
+
+List clank-managed files in the current repo as paths relative to your current directory (useful for `xargs rg` workflows).
+
+By default, this includes `clank/` files and agent files (`AGENTS.md`, etc.), but excludes dot-prefixed directories like `.claude/` and `.gemini/`. Use `--hidden` to include those.
+
+**Options:**
+- `--hidden` - Include files under dot-prefixed directories (`.claude/`, `.gemini/`)
+- `--depth <n>` - Max depth under `clank/` directories (e.g. `--depth 1` includes `*/clank/*.md` but excludes `*/clank/*/*.md`)
+- `-0, --null` - NUL-separate output paths (recommended when piping to `xargs`)
+- `--no-dedupe` - Disable deduplication of agent files and prompts
+- `--linked-only` - Only include symlinks into the overlay
+- `--unlinked-only` - Only include non-overlay files/symlinks
+- `--global|--project|--worktree` - Only include linked files from that scope (implies `--linked-only`)
+
+**Examples:**
+```bash
+clank files -0 | xargs -0 rg "TODO"
+clank files --depth 1
+clank files --hidden | rg '^\\.claude/'
+clank files .               # Only this directory/subtree (relative to cwd)
+```
+
 ### `clank rm <files...>` (alias: `remove`)
 
 Remove file(s) from both the overlay repository and the local project symlinks. Accepts [scope options](#scope-options); if omitted, clank detects the scope from the symlink.
@@ -230,7 +254,7 @@ export default {
 };
 ```
 
-- `agents` - which symlinks to create for agent files like CLAUDE.md
+- `agents` - which symlinks to create for agent files like CLAUDE.md; also controls which agent file/prompt path is preferred for `clank files` output when deduping.
 - `vscodeSettings` - when to generate `.vscode/settings.json` to show clank files in VS Code
   - `"auto"` (default): only if project already has a `.vscode` directory
   - `"always"`: always generate settings
