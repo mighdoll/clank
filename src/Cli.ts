@@ -158,6 +158,7 @@ function registerUtilityCommands(program: Command): void {
 function registerFilesCommand(program: Command): void {
   const files = program
     .command("files")
+    .alias("list")
     .description("List clank-managed files (paths relative to cwd)")
     .argument(
       "[path]",
