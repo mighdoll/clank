@@ -202,19 +202,16 @@ async function collectMappings(
     targetRoot,
     ignorePatterns,
   );
-  return {
-    agentsMappings: mappings.filter(
-      (m) => basename(m.targetPath) === "agents.md",
-    ),
-    promptsMappings: mappings.filter((m) =>
-      m.targetPath.includes("/.claude/prompts/"),
-    ),
-    regularMappings: mappings.filter(
-      (m) =>
-        basename(m.targetPath) !== "agents.md" &&
-        !m.targetPath.includes("/.claude/prompts/"),
-    ),
-  };
+  const isAgent = ({ targetPath }: FileMapping) =>
+    basename(targetPath) === "agents.md";
+  const isPrompt = ({ targetPath }: FileMapping) =>
+    targetPath.includes("/.claude/prompts/");
+
+  const agentsMappings = mappings.filter(isAgent);
+  const promptsMappings = mappings.filter((m) => !isAgent(m) && isPrompt(m));
+  const regularMappings = mappings.filter((m) => !isAgent(m) && !isPrompt(m));
+
+  return { agentsMappings, promptsMappings, regularMappings };
 }
 
 async function dirMappings(
