@@ -101,33 +101,37 @@ test.concurrent("rm with --project flag uses project scope", () =>
     await expect(lstat(overlayPath)).rejects.toThrow();
   }));
 
-test.concurrent("rm errors when local file is not a symlink", () =>
+test.concurrent("rm removes both local file and overlay when both exist", () =>
   withTestEnv(async (ctx) => {
     await initAndLink(ctx);
 
     // Create a real file (not through clank)
     const clankDir = join(ctx.targetDir, "clank");
     await mkdir(clankDir, { recursive: true });
-    await writeFile(join(clankDir, "real.md"), "# Real file\n", "utf-8");
+    const localPath = join(clankDir, "real.md");
+    await writeFile(localPath, "# Real file\n", "utf-8");
 
     // Also create it in overlay so it would be found
     const overlayClankDir = overlay(ctx, "clank");
     await mkdir(overlayClankDir, { recursive: true });
-    await writeFile(join(overlayClankDir, "real.md"), "# Overlay\n", "utf-8");
+    const overlayPath = join(overlayClankDir, "real.md");
+    await writeFile(overlayPath, "# Overlay\n", "utf-8");
 
-    // rm should error
-    await expect(clank(ctx, "rm real.md")).rejects.toThrow(
-      "not managed by clank",
-    );
+    // rm should remove both
+    await clank(ctx, "rm real.md");
+
+    // Both should be gone
+    await expect(lstat(localPath)).rejects.toThrow();
+    await expect(lstat(overlayPath)).rejects.toThrow();
   }));
 
-test.concurrent("rm errors when file not in any overlay scope", () =>
+test.concurrent("rm errors when file does not exist", () =>
   withTestEnv(async (ctx) => {
     await initAndLink(ctx);
 
     // Try to remove a file that doesn't exist anywhere
     await expect(clank(ctx, "rm nonexistent.md")).rejects.toThrow(
-      "Not found in overlay",
+      "File not found",
     );
   }));
 
@@ -208,5 +212,25 @@ test.concurrent("rm is idempotent (second remove reports not found)", () =>
     await clank(ctx, "rm temp.md");
 
     // Second remove should error (file no longer exists)
-    await expect(clank(ctx, "rm temp.md")).rejects.toThrow("Not found");
+    await expect(clank(ctx, "rm temp.md")).rejects.toThrow("File not found");
+  }));
+
+test.concurrent("rm removes unmanaged file in clank/ directory", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+
+    // Create a file directly in target's clank/ directory (not via clank add)
+    const clankDir = join(ctx.targetDir, "clank");
+    await mkdir(clankDir, { recursive: true });
+    const filePath = join(clankDir, "unmanaged.jpg");
+    await writeFile(filePath, "some data", "utf-8");
+
+    // Verify file exists
+    expect((await lstat(filePath)).isFile()).toBe(true);
+
+    // rm should remove the unmanaged file
+    await clank(ctx, "rm unmanaged.jpg");
+
+    // File should be gone
+    await expect(lstat(filePath)).rejects.toThrow();
   }));

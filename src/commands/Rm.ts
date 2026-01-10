@@ -41,14 +41,18 @@ export async function rmCommand(
   for (const filePath of filePaths) {
     const normalizedPath = normalizeAddPath(filePath, cwd, gitRoot);
 
+    // Try to find overlay path (may not exist for unmanaged files)
     const scope = await resolveScope(normalizedPath, options, context);
-    const overlayPath = targetToOverlay(normalizedPath, scope, context);
-
-    if (!(await fileExists(overlayPath))) {
-      throw new Error(`Not found in overlay: ${relative(cwd, normalizedPath)}`);
-    }
+    const overlayPath = scope
+      ? targetToOverlay(normalizedPath, scope, context)
+      : null;
 
     if (isAgentFile(filePath)) {
+      if (!overlayPath || !(await fileExists(overlayPath))) {
+        throw new Error(
+          `Not found in overlay: ${relative(cwd, normalizedPath)}`,
+        );
+      }
       await removeAgentFiles(normalizedPath, overlayPath, overlayRoot, config);
     } else {
       await removeFile(normalizedPath, overlayPath, overlayRoot, cwd);
@@ -56,12 +60,12 @@ export async function rmCommand(
   }
 }
 
-/** Resolve which scope to remove from */
+/** Resolve which scope to remove from, or null if not in overlay */
 async function resolveScope(
   targetPath: string,
   options: RmOptions,
   context: MapperContext,
-): Promise<Scope> {
+): Promise<Scope | null> {
   // Explicit scope takes priority
   if (options.global || options.project || options.worktree) {
     return resolveScopeFromOptions(options);
@@ -73,10 +77,8 @@ async function resolveScope(
   const found = await findInScopes(targetPath, context);
 
   if (found.length === 0) {
-    throw new Error(
-      `Not found in overlay: ${basename(targetPath)}\n` +
-        `File does not exist in any scope (global, project, worktree)`,
-    );
+    // Not in overlay - might be an unmanaged local file
+    return null;
   }
 
   if (found.length > 1) {
@@ -119,28 +121,36 @@ async function removeAgentFiles(
 /** Remove a regular file */
 async function removeFile(
   targetPath: string,
-  overlayPath: string,
+  overlayPath: string | null,
   overlayRoot: string,
   cwd: string,
 ): Promise<void> {
   const fileName = relative(cwd, targetPath);
+  const targetExists = await fileExists(targetPath);
+  const overlayExists = overlayPath ? await fileExists(overlayPath) : false;
 
-  // Check if local file exists and handle it
-  if (await fileExists(targetPath)) {
+  // Nothing to remove
+  if (!targetExists && !overlayExists) {
+    throw new Error(`File not found: ${fileName}`);
+  }
+
+  // Handle target file
+  if (targetExists) {
     if (await isSymlinkToOverlay(targetPath, overlayRoot)) {
       await unlink(targetPath);
       console.log(`Removed symlink: ${fileName}`);
     } else {
-      throw new Error(
-        `File exists but is not managed by clank: ${fileName}\n` +
-          `Cannot remove a file that is not a symlink to the overlay`,
-      );
+      // Unmanaged file in clank/ directory - just remove it
+      await rm(targetPath);
+      console.log(`Removed: ${fileName}`);
     }
   }
 
-  // Remove from overlay
-  await rm(overlayPath);
-  console.log(`Removed from overlay: ${basename(overlayPath)}`);
+  // Remove from overlay if it exists
+  if (overlayPath && overlayExists) {
+    await rm(overlayPath);
+    console.log(`Removed from overlay: ${basename(overlayPath)}`);
+  }
 }
 
 /** Search all scopes to find where the file exists */
