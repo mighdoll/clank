@@ -32,8 +32,7 @@ export async function forEachAgentPath(
 ): Promise<void> {
   const agentPaths = getAgentFilePaths(dir);
   for (const agent of agents) {
-    const key = agent.toLowerCase();
-    const agentPath = agentPaths[key];
+    const agentPath = agentPaths[agent.toLowerCase()];
     if (!agentPath) continue;
     await fn(agentPath, agent);
   }

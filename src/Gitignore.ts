@@ -99,24 +99,16 @@ export function isClankPattern(glob: string): boolean {
   const normalized = glob.replace(/^\*\*\//, "").replace(/\/$/, "");
 
   // Check against managed directories
-  for (const dir of targetManagedDirs) {
-    if (
-      normalized === dir ||
-      normalized.startsWith(`${dir}/`) ||
-      normalized.endsWith(`/${dir}`)
-    ) {
-      return true;
-    }
-  }
+  const matchesDir = (dir: string) =>
+    normalized === dir ||
+    normalized.startsWith(`${dir}/`) ||
+    normalized.endsWith(`/${dir}`);
+  if (targetManagedDirs.some(matchesDir)) return true;
 
   // Check against agent files
-  for (const agentFile of agentFiles) {
-    if (normalized === agentFile || normalized.endsWith(`/${agentFile}`)) {
-      return true;
-    }
-  }
-
-  return false;
+  const matchesAgent = (f: string) =>
+    normalized === f || normalized.endsWith(`/${f}`);
+  return agentFiles.some(matchesAgent);
 }
 
 /** Convert collected patterns to VS Code exclude globs, filtering clank patterns */
@@ -143,14 +135,11 @@ export function deduplicateGlobs(globs: string[]): string[] {
   const coveredSuffixes = new Set(universal.map((g) => g.slice(3)));
 
   // Keep specific patterns not covered by a universal pattern
-  const uncovered = specific.filter((glob) => {
-    for (const suffix of coveredSuffixes) {
-      if (glob.endsWith(`/**/${suffix}`) || glob.endsWith(`/${suffix}`)) {
-        return false;
-      }
-    }
-    return true;
-  });
+  const isCovered = (glob: string) =>
+    [...coveredSuffixes].some(
+      (s) => glob.endsWith(`/**/${s}`) || glob.endsWith(`/${s}`),
+    );
+  const uncovered = specific.filter((glob) => !isCovered(glob));
 
   return [...universal, ...uncovered];
 }

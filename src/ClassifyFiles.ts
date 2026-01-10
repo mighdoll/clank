@@ -61,14 +61,10 @@ export async function classifyAgentFiles(
 }
 
 /** @return true if classification has any problems */
-export function agentFileProblems(
-  classification: AgentFileClassification,
-): boolean {
-  return (
-    classification.tracked.length > 0 ||
-    classification.untracked.length > 0 ||
-    classification.staleSymlinks.length > 0 ||
-    classification.outdatedSymlinks.length > 0
+export function agentFileProblems(c: AgentFileClassification): boolean {
+  const { tracked, untracked, staleSymlinks, outdatedSymlinks } = c;
+  return [tracked, untracked, staleSymlinks, outdatedSymlinks].some(
+    (a) => a.length > 0,
   );
 }
 
@@ -110,10 +106,12 @@ ${commands.join("\n")}`);
   }
 
   if (classified.outdatedSymlinks.length > 0) {
-    const details = classified.outdatedSymlinks.map((s) => {
-      const symlinkRel = rel(s.symlinkPath);
-      return `  ${symlinkRel}\n    points to: ${s.currentTarget}\n    expected:  ${s.expectedTarget}`;
-    });
+    const details = classified.outdatedSymlinks.map(
+      (s) =>
+        `  ${rel(s.symlinkPath)}\n` +
+        `    points to: ${s.currentTarget}\n` +
+        `    expected:  ${s.expectedTarget}`,
+    );
     sections.push(`Found outdated agent symlinks (pointing to wrong overlay path).
 
 This typically happens after a directory rename. Remove symlinks and run \`clank link\`:
@@ -192,15 +190,12 @@ async function classifyAgentSymlink(
     const agentsMdPath = join(dirname(filePath), "agents.md");
     const expectedTarget = targetToOverlay(agentsMdPath, "project", mapperCtx);
     if (absoluteTarget !== expectedTarget) {
-      return {
-        outdatedSymlinks: [
-          {
-            symlinkPath: filePath,
-            currentTarget: absoluteTarget,
-            expectedTarget,
-          },
-        ],
+      const symlink = {
+        symlinkPath: filePath,
+        currentTarget: absoluteTarget,
+        expectedTarget,
       };
+      return { outdatedSymlinks: [symlink] };
     }
   }
 

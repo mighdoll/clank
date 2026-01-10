@@ -101,14 +101,10 @@ export async function* walkOverlayFiles(
     ignorePatterns.length > 0 ? picomatch(ignorePatterns) : null;
 
   const skip = (relPath: string): boolean => {
-    // Skip templates
-    if (relPath.startsWith("clank/init/")) return true;
-    // Check ignore patterns against relative path and basename
-    if (isIgnored) {
-      const basename = relPath.split("/").at(-1) ?? "";
-      if (isIgnored(relPath) || isIgnored(basename)) return true;
-    }
-    return false;
+    if (relPath.startsWith("clank/init/")) return true; // Skip templates
+    if (!isIgnored) return false;
+    const basename = relPath.split("/").at(-1) ?? "";
+    return isIgnored(relPath) || isIgnored(basename);
   };
 
   const genEntries = walkDirectory(overlayRoot, { skip });
@@ -140,7 +136,6 @@ function isMatchingPromptPath(
   canonicalPath: string,
   actualPath: string,
 ): boolean {
-  const canonicalPrompt = getPromptRelPath(canonicalPath);
-  const actualPrompt = getPromptRelPath(actualPath);
-  return canonicalPrompt !== null && canonicalPrompt === actualPrompt;
+  const canonical = getPromptRelPath(canonicalPath);
+  return canonical !== null && canonical === getPromptRelPath(actualPath);
 }

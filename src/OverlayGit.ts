@@ -54,11 +54,7 @@ function filterIgnoredLines(
     if (isIgnored(filePath) || isIgnored(pathBasename)) return false;
 
     // Check each directory segment (for patterns like ".obsidian")
-    for (const segment of segments) {
-      if (isIgnored(segment)) return false;
-    }
-
-    return true;
+    return !segments.some((segment) => isIgnored(segment));
   });
 }
 
@@ -81,10 +77,8 @@ function parseScopedPath(filePath: string): {
         Math.max(0, afterWorktrees.length - 1),
       );
       const branch = afterWorktrees.slice(0, branchSegments).join("/");
-      return {
-        scope: `${project}/${branch}`,
-        pathParts: afterWorktrees.slice(branchSegments),
-      };
+      const scope = `${project}/${branch}`;
+      return { scope, pathParts: afterWorktrees.slice(branchSegments) };
     }
     return { scope: project || "unknown", pathParts: segments.slice(2) };
   }
