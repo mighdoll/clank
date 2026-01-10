@@ -217,19 +217,52 @@ async function addSingleFile(
     );
   }
 
-  // Check if this is an agent file (CLAUDE.md, AGENTS.md, GEMINI.md)
+  await createSymlinksForFile({
+    filePath,
+    normalizedPath,
+    overlayPath,
+    config,
+    gitRoot,
+    overlayRoot,
+    cwd,
+    quiet,
+  });
+}
+
+interface CreateSymlinksParams {
+  filePath: string;
+  normalizedPath: string;
+  overlayPath: string;
+  config: { agents: string[] };
+  gitRoot: string;
+  overlayRoot: string;
+  cwd: string;
+  quiet?: boolean;
+}
+
+/** Create symlinks based on file type (agent, prompt, or regular) */
+async function createSymlinksForFile(params: CreateSymlinksParams) {
+  const {
+    filePath,
+    normalizedPath,
+    overlayPath,
+    config,
+    gitRoot,
+    overlayRoot,
+    cwd,
+    quiet,
+  } = params;
+
   if (isAgentFile(filePath)) {
     const symlinkDir = dirname(normalizedPath);
-    const { agents } = config;
-    const params = {
+    await createAgentLinks({
       overlayPath,
       symlinkDir,
       gitRoot,
       overlayRoot,
-      agents,
+      agents: config.agents,
       quiet,
-    };
-    await createAgentLinks(params);
+    });
   } else if (isPromptFile(normalizedPath)) {
     await handlePromptFile(normalizedPath, overlayPath, gitRoot, cwd, quiet);
   } else {
