@@ -133,9 +133,10 @@ function registerOverlayCommands(program: Command): void {
     .command("add")
     .description("Add file(s) to overlay and create symlinks")
     .argument(
-      "<files...>",
+      "[files...]",
       "File path(s) (e.g., style.md, .claude/commands/review.md)",
     )
+    .option("-i, --interactive", "Interactively add all unadded files")
     .option("-g, --global", "Add to global location (all projects)")
     .option("-p, --project", "Add to project location (default)")
     .option("-w, --worktree", "Add to worktree location (this branch only)")

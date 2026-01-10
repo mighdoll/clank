@@ -6,6 +6,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
+import * as readline from "node:readline";
 import { forEachAgentPath } from "../AgentFiles.ts";
 import { expandPath, loadConfig, validateOverlayExists } from "../Config.ts";
 import {
@@ -31,8 +32,9 @@ import {
 } from "../Mapper.ts";
 import { createPromptLinks, isSymlinkToOverlay } from "../OverlayLinks.ts";
 import { scopeFromSymlink } from "../ScopeFromSymlink.ts";
+import { findUnaddedFiles } from "./Check.ts";
 
-export type AddOptions = ScopeOptions;
+export type AddOptions = ScopeOptions & { interactive?: boolean };
 
 interface AddContext {
   cwd: string;
@@ -56,6 +58,14 @@ interface AgentLinkClassification {
   skipped: string[];
 }
 
+type InteractiveChoice = "project" | "worktree" | "global" | "skip" | "quit";
+type ScopeCounts = {
+  project: number;
+  worktree: number;
+  global: number;
+  skip: number;
+};
+
 const scopeLabels: Record<Scope, string> = {
   global: "global",
   project: "project",
@@ -75,6 +85,17 @@ export async function addCommand(
   await validateAddOptions(options, overlayRoot, gitContext);
 
   const ctx = { cwd, gitContext, config, overlayRoot };
+
+  if (options.interactive) {
+    await addAllInteractive(ctx);
+    return;
+  }
+
+  if (filePaths.length === 0) {
+    throw new Error(
+      "No files specified. Use --interactive for interactive mode.",
+    );
+  }
 
   for (const filePath of filePaths) {
     const inputPath = join(cwd, filePath);
@@ -105,6 +126,38 @@ async function validateAddOptions(
         `Use 'git worktree add' to create a worktree, or use --project scope instead.`,
     );
   }
+}
+
+/** Interactive mode: add all unadded files with per-file scope selection */
+async function addAllInteractive(ctx: AddContext): Promise<void> {
+  const { cwd, gitContext, overlayRoot } = ctx;
+  const context: MapperContext = {
+    overlayRoot,
+    targetRoot: gitContext.gitRoot,
+    gitContext,
+  };
+
+  const unadded = await findUnaddedFiles(context);
+  const regularFiles = unadded.filter((f) => f.kind === "unadded");
+
+  if (regularFiles.length === 0) {
+    console.log("No unadded files found.");
+    return;
+  }
+
+  console.log(`Found ${regularFiles.length} unadded file(s):\n`);
+
+  const counts: ScopeCounts = { project: 0, worktree: 0, global: 0, skip: 0 };
+
+  for (let i = 0; i < regularFiles.length; i++) {
+    const file = regularFiles[i];
+    const relPath = relative(cwd, file.targetPath);
+    const result = await promptAndAddFile(relPath, i, regularFiles.length, ctx);
+    if (result === "quit") break;
+    if (result !== "error") counts[result]++;
+  }
+
+  printSummary(counts);
 }
 
 async function isDirectory(path: string): Promise<boolean> {
@@ -162,6 +215,56 @@ async function addSingleFile(
     await handlePromptFile(normalizedPath, overlayPath, gitRoot, cwd);
   } else {
     await handleRegularFile(normalizedPath, overlayPath, overlayRoot, cwd);
+  }
+}
+
+/** Prompt for scope and add a single file. Returns the choice or "error". */
+async function promptAndAddFile(
+  relPath: string,
+  index: number,
+  total: number,
+  ctx: AddContext,
+): Promise<InteractiveChoice | "error"> {
+  process.stdout.write(`[${index + 1}/${total}] ${relPath}\n`);
+  process.stdout.write(
+    "      (P)roject  (W)orktree  (G)lobal  (S)kip  (Q)uit  [P]: ",
+  );
+
+  const choice = await readScopeChoice(ctx.gitContext.isWorktree);
+
+  if (choice === "quit" || choice === "skip") {
+    if (choice === "quit") console.log("\nAborted.");
+    else console.log();
+    return choice;
+  }
+
+  const scopeOptions: ScopeOptions = {
+    project: choice === "project",
+    worktree: choice === "worktree",
+    global: choice === "global",
+  };
+
+  try {
+    await addSingleFile(relPath, scopeOptions, ctx);
+    console.log();
+    return choice;
+  } catch (error) {
+    console.error(`  Error: ${error instanceof Error ? error.message : error}`);
+    console.log();
+    return "error";
+  }
+}
+
+/** Print summary of interactive add results */
+function printSummary(counts: Record<string, number>): void {
+  const parts: string[] = [];
+  if (counts.project > 0) parts.push(`${counts.project} to project`);
+  if (counts.worktree > 0) parts.push(`${counts.worktree} to worktree`);
+  if (counts.global > 0) parts.push(`${counts.global} to global`);
+  if (counts.skip > 0) parts.push(`${counts.skip} skipped`);
+
+  if (parts.length > 0) {
+    console.log(`Added ${parts.join(", ")}`);
   }
 }
 
@@ -275,6 +378,40 @@ async function handleRegularFile(
   }
 }
 
+/** Read a single keypress for scope selection */
+async function readScopeChoice(
+  isWorktree: boolean,
+): Promise<InteractiveChoice> {
+  const key = await readSingleKey();
+
+  switch (key.toLowerCase()) {
+    case "p":
+    case "\r":
+    case "\n":
+      console.log("project");
+      return "project";
+    case "w":
+      if (!isWorktree) {
+        console.log("(not in worktree, using project)");
+        return "project";
+      }
+      console.log("worktree");
+      return "worktree";
+    case "g":
+      console.log("global");
+      return "global";
+    case "s":
+      console.log("skip");
+      return "skip";
+    case "q":
+    case "\x03": // Ctrl+C
+      return "quit";
+    default:
+      console.log("project");
+      return "project";
+  }
+}
+
 /** Find content from normalized path or bare input path */
 async function findSourceContent(
   normalizedPath: string,
@@ -323,4 +460,27 @@ async function classifyAgentLinks(
   });
 
   return { toCreate, existing, skipped };
+}
+
+/** Read a single keypress from stdin (raw mode) */
+function readSingleKey(): Promise<string> {
+  return new Promise((resolve) => {
+    const wasRaw = process.stdin.isRaw;
+    if (process.stdin.isTTY) {
+      readline.emitKeypressEvents(process.stdin);
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+
+    const onKeypress = (data: Buffer): void => {
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(wasRaw ?? false);
+      }
+      process.stdin.pause();
+      process.stdin.removeListener("data", onKeypress);
+      resolve(data.toString());
+    };
+
+    process.stdin.once("data", onKeypress);
+  });
 }
