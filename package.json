@@ -14,11 +14,12 @@
   "repository": "github:mighdoll/clank",
   "scripts": {
     "bump": "monobump",
-    "fix": "biome check --fix --unsafe",
+    "fix": "biome check --fix --unsafe --error-on-warnings",
     "fix:pkgJsonFormat": "syncpack format",
     "global": "pnpm link --global",
     "lint": "biome check --error-on-warnings",
     "prepublishOnly": "run-s lint typecheck fix:pkgJsonFormat test:once",
+    "prepush": "run-s fix typecheck fix:pkgJsonFormat test:once",
     "test": "vitest",
     "test:once": "vitest run",
     "test:ui": "vitest --ui",
