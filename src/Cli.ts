@@ -203,7 +203,7 @@ function registerMvCommand(program: Command): void {
   const cmd = program
     .command("mv")
     .alias("move")
-    .description("Move file(s) between overlay scopes")
+    .description("Move or rename file(s) in overlay")
     .argument("<files...>", "File(s) to move");
 
   cmd.addOption(

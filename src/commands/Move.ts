@@ -2,7 +2,12 @@ import { rename, unlink } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { forEachAgentPath, managedAgentDirs } from "../AgentFiles.ts";
 import { expandPath, loadConfig, validateOverlayExists } from "../Config.ts";
-import { createSymlink, ensureDir, getLinkTarget } from "../FsUtil.ts";
+import {
+  createSymlink,
+  ensureDir,
+  fileExists,
+  getLinkTarget,
+} from "../FsUtil.ts";
 import { getGitContext } from "../Git.ts";
 import {
   getPromptRelPath,
@@ -26,12 +31,12 @@ interface MoveContext {
   agents: string[];
 }
 
-/** Move file(s) between overlay scopes */
+/** Move or rename file(s) in overlay */
 export async function moveCommand(
   filePaths: string[],
   options: MoveOptions,
 ): Promise<void> {
-  const targetScope = resolveScopeFromOptions(options, "require");
+  const hasScope = options.global || options.project || options.worktree;
   const cwd = process.cwd();
   const gitContext = await getGitContext(cwd);
   const config = await loadConfig();
@@ -42,8 +47,23 @@ export async function moveCommand(
   const { gitRoot: targetRoot } = gitContext;
   const context: MapperContext = { overlayRoot, targetRoot, gitContext };
 
-  for (const filePath of filePaths) {
-    await moveSingleFile(filePath, targetScope, context, cwd, config);
+  if (hasScope) {
+    // Scope-move mode (existing behavior)
+    const targetScope = resolveScopeFromOptions(options, "require");
+    for (const filePath of filePaths) {
+      await moveSingleFile(filePath, targetScope, context, cwd, config);
+    }
+  } else if (filePaths.length === 2) {
+    // Rename mode
+    await renameFile(filePaths[0], filePaths[1], context, cwd, config);
+  } else if (filePaths.length === 1) {
+    throw new Error(
+      "Must specify destination or scope flag (--global, --project, --worktree)",
+    );
+  } else {
+    throw new Error(
+      "Too many arguments without scope flag. Use --global, --project, or --worktree",
+    );
   }
 }
 
@@ -99,6 +119,64 @@ async function moveSingleFile(
   console.log(
     `Moved ${fileName} from ${currentScope} → ${targetScope} overlay`,
   );
+}
+
+/** Rename a file within its current scope */
+async function renameFile(
+  sourcePath: string,
+  destName: string,
+  context: MapperContext,
+  cwd: string,
+  config: { agents: string[] },
+): Promise<void> {
+  const { overlayRoot, targetRoot: gitRoot } = context;
+  const sourceBarePath = join(cwd, sourcePath);
+
+  // Verify source is managed by clank
+  const currentScope = await scopeFromSymlink(sourceBarePath, context);
+  if (!currentScope) {
+    throw new Error(`${sourcePath} is not managed by clank`);
+  }
+  if (isAgentFile(sourcePath)) {
+    throw new Error(
+      "Cannot rename agent files (CLAUDE.md, AGENTS.md, GEMINI.md)",
+    );
+  }
+
+  // Build dest path (same directory as source)
+  const sourceDir = dirname(sourcePath);
+  const destPath = sourceDir === "." ? destName : join(sourceDir, destName);
+
+  // Calculate overlay paths
+  const normalizedSource = normalizeAddPath(sourcePath, cwd, gitRoot);
+  const normalizedDest = normalizeAddPath(destPath, cwd, gitRoot);
+  const sourceOverlay = targetToOverlay(
+    normalizedSource,
+    currentScope,
+    context,
+  );
+  const destOverlay = targetToOverlay(normalizedDest, currentScope, context);
+
+  if (await fileExists(destOverlay)) {
+    throw new Error(`Destination already exists: ${destName}`);
+  }
+
+  // Rename in overlay and update symlinks
+  await ensureDir(dirname(destOverlay));
+  await rename(sourceOverlay, destOverlay);
+  const moveCtx: MoveContext = { overlayRoot, gitRoot, agents: config.agents };
+  if (isPromptFile(normalizedSource)) {
+    await renamePromptLinks(
+      normalizedSource,
+      normalizedDest,
+      destOverlay,
+      moveCtx,
+    );
+  } else {
+    await renameSymlink(normalizedSource, normalizedDest, destOverlay, moveCtx);
+  }
+
+  console.log(`Renamed ${sourcePath} → ${destName} (${currentScope} scope)`);
 }
 
 /** Recreate agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md) after moving */
@@ -171,4 +249,56 @@ async function recreateSymlink(
   // Create new symlink
   const linkTarget = getLinkTarget(targetPath, overlayPath);
   await createSymlink(linkTarget, targetPath);
+}
+
+/** Rename prompt symlinks in all agent directories */
+async function renamePromptLinks(
+  oldNormPath: string,
+  newNormPath: string,
+  newOverlayPath: string,
+  ctx: MoveContext,
+): Promise<void> {
+  const { overlayRoot, gitRoot } = ctx;
+  const oldPromptRel = getPromptRelPath(oldNormPath);
+  const newPromptRel = getPromptRelPath(newNormPath);
+  if (!oldPromptRel || !newPromptRel) return;
+
+  // Remove old symlinks
+  for (const agentDir of managedAgentDirs) {
+    const oldTarget = join(gitRoot, agentDir, "prompts", oldPromptRel);
+    if (await isSymlinkToOverlay(oldTarget, overlayRoot)) {
+      await unlink(oldTarget);
+    }
+  }
+
+  // Create new symlinks
+  const created = await createPromptLinks(
+    newOverlayPath,
+    newPromptRel,
+    gitRoot,
+  );
+
+  if (created.length > 0) {
+    console.log(
+      `Updated symlinks: ${created.map((p) => relative(gitRoot, p)).join(", ")}`,
+    );
+  }
+}
+
+/** Rename a regular symlink */
+async function renameSymlink(
+  oldTargetPath: string,
+  newTargetPath: string,
+  newOverlayPath: string,
+  ctx: MoveContext,
+): Promise<void> {
+  // Remove old symlink
+  if (await isSymlinkToOverlay(oldTargetPath, ctx.overlayRoot)) {
+    await unlink(oldTargetPath);
+  }
+
+  // Create new symlink
+  await ensureDir(dirname(newTargetPath));
+  const linkTarget = getLinkTarget(newTargetPath, newOverlayPath);
+  await createSymlink(linkTarget, newTargetPath);
 }
