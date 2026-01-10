@@ -84,6 +84,9 @@ clank link ~/my-project # Link to specific project
 
 Move a file to the overlay and replace it with a symlink. If the file doesn't exist, an empty file is created. Accepts [scope options](#scope-options).
 
+**Options:**
+- `-i, --interactive` - Interactively add all unadded files, prompting for scope on each
+
 **Examples:**
 ```bash
 clank add style.md                            # Project scope (default)
@@ -92,6 +95,24 @@ clank add notes.md --worktree                 # Worktree scope
 clank add .claude/commands/review.md --global # Global command
 clank add .claude/commands/build.md           # Project command (default)
 clank add CLAUDE.md                           # Creates agents.md + agent symlinks
+clank add -i                                  # Interactive mode for all unadded files
+```
+
+**Interactive mode:**
+
+Running `clank add --interactive` finds all unadded files and prompts for each:
+
+```
+Found 3 unadded file(s):
+
+[1/3] clank/notes.md
+      (P)roject  (W)orktree  (G)lobal  (S)kip  (Q)uit  [P]:
+```
+
+Press a single key to select the scope (default: Project). The summary shows what was added:
+
+```
+Added 2 to project, 1 skipped
 ```
 
 ### `clank unlink [target]`
@@ -173,10 +194,13 @@ clank rm style.md --global         # Remove global style guide
 
 ### `clank mv <files...>` (alias: `move`)
 
-Move file(s) between overlay scopes. Requires one [scope option](#scope-options) to specify the destination.
+Move or rename file(s) in the overlay. With a [scope option](#scope-options), moves files to that scope. With two arguments and no scope, renames within the current scope.
 
-**Example:**
+**Examples:**
 ```bash
+# Rename a file (keeps same scope)
+clank mv batch-dry-check.md batch-dry.md
+
 # Promote a worktree note to project scope
 clank mv clank/notes.md --project
 
