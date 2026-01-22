@@ -296,9 +296,13 @@ async function maybeGenerateVscodeSettings(
   if (setting === "auto") {
     const isVscode = await isVscodeProject(targetRoot);
     if (!isVscode) return;
+
+    // Don't modify tracked settings.json - would create uncommitted changes
+    const settingsPath = join(targetRoot, ".vscode/settings.json");
+    if (await isTrackedByGit(settingsPath, targetRoot)) return;
   }
 
-  // setting === "always" or (setting === "auto" && isVscodeProject)
+  // setting === "always" or (setting === "auto" && untracked vscode project)
   console.log("");
   await generateVscodeSettings(targetRoot);
 }

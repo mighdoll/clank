@@ -821,6 +821,35 @@ test.concurrent("link auto-generates vscode settings when .vscode exists", () =>
     expect(settings["editor.fontSize"]).toBe(14);
   }));
 
+test.concurrent("link skips vscode settings when settings.json is tracked by git", () =>
+  withTestEnv(async (ctx) => {
+    // Create and commit .vscode/settings.json before linking
+    const vscodeDir = join(ctx.targetDir, ".vscode");
+    await mkdir(vscodeDir, { recursive: true });
+    const originalSettings = '{"editor.fontSize": 14}\n';
+    await writeFile(join(vscodeDir, "settings.json"), originalSettings, "utf-8");
+
+    // Track the settings file in git
+    await execa("git", ["add", ".vscode/settings.json"], { cwd: ctx.targetDir });
+    await execa("git", ["commit", "-m", "add vscode settings"], {
+      cwd: ctx.targetDir,
+    });
+
+    // Create a .gitignore
+    await writeFile(
+      join(ctx.targetDir, ".gitignore"),
+      "node_modules/\n",
+      "utf-8",
+    );
+
+    await initAndLink(ctx);
+
+    // VS Code settings should NOT have been modified
+    const settingsPath = join(ctx.targetDir, ".vscode/settings.json");
+    const settings = await readFile(settingsPath, "utf-8");
+    expect(settings).toBe(originalSettings);
+  }));
+
 test.concurrent("add .claude/prompts/ creates symlinks in both .claude and .gemini", () =>
   withTestEnv(async (ctx) => {
     await initAndLink(ctx);
