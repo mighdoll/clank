@@ -827,10 +827,16 @@ test.concurrent("link skips vscode settings when settings.json is tracked by git
     const vscodeDir = join(ctx.targetDir, ".vscode");
     await mkdir(vscodeDir, { recursive: true });
     const originalSettings = '{"editor.fontSize": 14}\n';
-    await writeFile(join(vscodeDir, "settings.json"), originalSettings, "utf-8");
+    await writeFile(
+      join(vscodeDir, "settings.json"),
+      originalSettings,
+      "utf-8",
+    );
 
     // Track the settings file in git
-    await execa("git", ["add", ".vscode/settings.json"], { cwd: ctx.targetDir });
+    await execa("git", ["add", ".vscode/settings.json"], {
+      cwd: ctx.targetDir,
+    });
     await execa("git", ["commit", "-m", "add vscode settings"], {
       cwd: ctx.targetDir,
     });
@@ -848,6 +854,192 @@ test.concurrent("link skips vscode settings when settings.json is tracked by git
     const settingsPath = join(ctx.targetDir, ".vscode/settings.json");
     const settings = await readFile(settingsPath, "utf-8");
     expect(settings).toBe(originalSettings);
+  }));
+
+test.concurrent("vscode merges base, local, and clank patterns", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+
+    // Create layered settings
+    const vscodeDir = join(ctx.targetDir, ".vscode");
+    await mkdir(vscodeDir, { recursive: true });
+
+    await writeFile(
+      join(vscodeDir, "settings.base.json"),
+      JSON.stringify({
+        "editor.fontSize": 14,
+        "search.exclude": { "**/vendor": true },
+      }),
+      "utf-8",
+    );
+    await writeFile(
+      join(vscodeDir, "settings.local.json"),
+      JSON.stringify({
+        "editor.tabSize": 4,
+        "search.exclude": { "**/tmp": true },
+      }),
+      "utf-8",
+    );
+    await writeFile(
+      join(ctx.targetDir, ".gitignore"),
+      "node_modules/\n",
+      "utf-8",
+    );
+
+    await clank(ctx, "vscode");
+
+    const settingsPath = join(vscodeDir, "settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+
+    // Base settings preserved
+    expect(settings["editor.fontSize"]).toBe(14);
+    // Local settings merged
+    expect(settings["editor.tabSize"]).toBe(4);
+    // Clank settings added
+    expect(settings["search.useIgnoreFiles"]).toBe(false);
+    // All exclude patterns merged
+    expect(settings["search.exclude"]["**/vendor"]).toBe(true);
+    expect(settings["search.exclude"]["**/tmp"]).toBe(true);
+    expect(settings["search.exclude"]["**/node_modules"]).toBe(true);
+  }));
+
+test.concurrent("vscode --remove regenerates from base+local without clank patterns", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+
+    // Create layered settings
+    const vscodeDir = join(ctx.targetDir, ".vscode");
+    await mkdir(vscodeDir, { recursive: true });
+
+    await writeFile(
+      join(vscodeDir, "settings.base.json"),
+      JSON.stringify({ "editor.fontSize": 14 }),
+      "utf-8",
+    );
+    await writeFile(
+      join(ctx.targetDir, ".gitignore"),
+      "node_modules/\n",
+      "utf-8",
+    );
+
+    // Generate with clank patterns
+    await clank(ctx, "vscode");
+
+    let settings = JSON.parse(
+      await readFile(join(vscodeDir, "settings.json"), "utf-8"),
+    );
+    expect(settings["search.useIgnoreFiles"]).toBe(false);
+    expect(settings["search.exclude"]["**/node_modules"]).toBe(true);
+
+    // Remove clank patterns
+    await clank(ctx, "vscode --remove");
+
+    settings = JSON.parse(
+      await readFile(join(vscodeDir, "settings.json"), "utf-8"),
+    );
+    expect(settings["editor.fontSize"]).toBe(14);
+    expect(settings["search.useIgnoreFiles"]).toBeUndefined();
+    // Clank patterns should be removed
+    expect(settings["search.exclude"]?.["**/node_modules"]).toBeUndefined();
+  }));
+
+test.concurrent("link generates from base+local when settings.base.json exists", () =>
+  withTestEnv(async (ctx) => {
+    // Create layered settings before linking
+    const vscodeDir = join(ctx.targetDir, ".vscode");
+    await mkdir(vscodeDir, { recursive: true });
+
+    await writeFile(
+      join(vscodeDir, "settings.base.json"),
+      JSON.stringify({ "editor.fontSize": 14 }),
+      "utf-8",
+    );
+    await writeFile(
+      join(ctx.targetDir, ".gitignore"),
+      "node_modules/\n",
+      "utf-8",
+    );
+
+    await initAndLink(ctx);
+
+    const settingsPath = join(vscodeDir, "settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+
+    expect(settings["editor.fontSize"]).toBe(14);
+    expect(settings["search.useIgnoreFiles"]).toBe(false);
+  }));
+
+test.concurrent("vscode --force generates even when settings.json is tracked", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+
+    // Create and commit .vscode/settings.json
+    const vscodeDir = join(ctx.targetDir, ".vscode");
+    await mkdir(vscodeDir, { recursive: true });
+    await writeFile(
+      join(vscodeDir, "settings.json"),
+      JSON.stringify({ "editor.fontSize": 14 }),
+      "utf-8",
+    );
+    await execa("git", ["add", ".vscode/settings.json"], {
+      cwd: ctx.targetDir,
+    });
+    await execa("git", ["commit", "-m", "add vscode settings"], {
+      cwd: ctx.targetDir,
+    });
+
+    await writeFile(
+      join(ctx.targetDir, ".gitignore"),
+      "node_modules/\n",
+      "utf-8",
+    );
+
+    // Force generate
+    await clank(ctx, "vscode --force");
+
+    const settings = JSON.parse(
+      await readFile(join(vscodeDir, "settings.json"), "utf-8"),
+    );
+    expect(settings["search.useIgnoreFiles"]).toBe(false);
+  }));
+
+test.concurrent("vscode creates .vscode dir if missing", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+
+    // No .vscode directory exists
+    const vscodeDir = join(ctx.targetDir, ".vscode");
+    expect(await lstat(vscodeDir).catch(() => null)).toBeNull();
+
+    await writeFile(
+      join(ctx.targetDir, ".gitignore"),
+      "node_modules/\n",
+      "utf-8",
+    );
+
+    await clank(ctx, "vscode");
+
+    // .vscode should now exist with settings.json
+    const settings = JSON.parse(
+      await readFile(join(vscodeDir, "settings.json"), "utf-8"),
+    );
+    expect(settings["search.useIgnoreFiles"]).toBe(false);
+  }));
+
+test.concurrent("link does not create .vscode dir if missing", () =>
+  withTestEnv(async (ctx) => {
+    // No .vscode directory exists
+    await writeFile(
+      join(ctx.targetDir, ".gitignore"),
+      "node_modules/\n",
+      "utf-8",
+    );
+
+    await initAndLink(ctx);
+
+    // .vscode should still not exist
+    const vscodeDir = join(ctx.targetDir, ".vscode");
+    expect(await lstat(vscodeDir).catch(() => null)).toBeNull();
   }));
 
 test.concurrent("add .claude/prompts/ creates symlinks in both .claude and .gemini", () =>

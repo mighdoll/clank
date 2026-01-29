@@ -40,7 +40,11 @@ import {
   isWorktreeInitialized,
 } from "../Templates.ts";
 import { findOrphans } from "./Check.ts";
-import { generateVscodeSettings, isVscodeProject } from "./VsCode.ts";
+import {
+  checkVscodeTracking,
+  generateVscodeSettings,
+  isVscodeProject,
+} from "./VsCode.ts";
 
 interface FileMapping extends TargetMapping {
   overlayPath: string;
@@ -291,18 +295,22 @@ async function maybeGenerateVscodeSettings(
 ): Promise<void> {
   const setting = config.vscodeSettings ?? "auto";
 
+  // User opted out - skip silently
   if (setting === "never") return;
 
   if (setting === "auto") {
     const isVscode = await isVscodeProject(targetRoot);
     if (!isVscode) return;
-
-    // Don't modify tracked settings.json - would create uncommitted changes
-    const settingsPath = join(targetRoot, ".vscode/settings.json");
-    if (await isTrackedByGit(settingsPath, targetRoot)) return;
   }
 
-  // setting === "always" or (setting === "auto" && untracked vscode project)
+  // Check if settings.json is tracked and show appropriate warning
+  const check = await checkVscodeTracking(targetRoot);
+  if (!check.canGenerate) {
+    console.log(`\n${check.warning}`);
+    return;
+  }
+
+  // Generate: "always" mode, or "auto" with untracked/layered settings
   console.log("");
   await generateVscodeSettings(targetRoot);
 }

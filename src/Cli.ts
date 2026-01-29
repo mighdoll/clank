@@ -171,6 +171,7 @@ function registerUtilityCommands(program: Command): void {
     .command("vscode")
     .description("Generate VS Code settings to show clank files")
     .option("--remove", "Remove clank-generated VS Code settings")
+    .option("--force", "Generate even if settings.json is tracked by git")
     .action(withErrorHandling(vscodeCommand));
 }
 

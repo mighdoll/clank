@@ -16,6 +16,95 @@ import {
 
 export interface VscodeOptions {
   remove?: boolean;
+  force?: boolean;
+}
+
+/** Result of checking if VS Code settings can be generated */
+export interface VscodeTrackingCheck {
+  canGenerate: boolean;
+  warning?: string;
+  hasBase: boolean;
+}
+
+/** Check if settings.base.json exists */
+export async function hasBaseSettings(targetRoot: string): Promise<boolean> {
+  return fileExists(join(targetRoot, ".vscode/settings.base.json"));
+}
+
+/** Read layered settings (base + local) if base exists */
+async function readLayeredSettings(
+  targetRoot: string,
+): Promise<Record<string, unknown> | null> {
+  const basePath = join(targetRoot, ".vscode/settings.base.json");
+  const localPath = join(targetRoot, ".vscode/settings.local.json");
+
+  if (!(await fileExists(basePath))) return null;
+
+  let base: Record<string, unknown> = {};
+  const baseContent = await readFile(basePath, "utf-8");
+  try {
+    base = JSON.parse(baseContent);
+  } catch {
+    console.warn("Warning: Could not parse settings.base.json, ignoring");
+    return null;
+  }
+
+  let local: Record<string, unknown> = {};
+  if (await fileExists(localPath)) {
+    const localContent = await readFile(localPath, "utf-8");
+    try {
+      local = JSON.parse(localContent);
+    } catch {
+      console.warn("Warning: Could not parse settings.local.json, ignoring");
+    }
+  }
+
+  // Merge exclude patterns specially (combine, don't replace)
+  const baseSearch = (base["search.exclude"] as Record<string, boolean>) || {};
+  const localSearch =
+    (local["search.exclude"] as Record<string, boolean>) || {};
+  const baseFiles = (base["files.exclude"] as Record<string, boolean>) || {};
+  const localFiles = (local["files.exclude"] as Record<string, boolean>) || {};
+
+  return {
+    ...base,
+    ...local,
+    "search.exclude": { ...baseSearch, ...localSearch },
+    "files.exclude": { ...baseFiles, ...localFiles },
+  };
+}
+
+/** Check if settings.json is tracked and return appropriate warning */
+export async function checkVscodeTracking(
+  targetRoot: string,
+): Promise<VscodeTrackingCheck> {
+  const settingsPath = join(targetRoot, ".vscode/settings.json");
+  const hasBase = await hasBaseSettings(targetRoot);
+  const isTracked = await isTrackedByGit(settingsPath, targetRoot);
+
+  if (!isTracked) {
+    return { canGenerate: true, hasBase };
+  }
+
+  // settings.json is tracked
+  if (hasBase) {
+    return {
+      canGenerate: false,
+      hasBase,
+      warning:
+        "settings.base.json found but settings.json is still tracked.\n" +
+        "Complete migration: git rm --cached .vscode/settings.json",
+    };
+  }
+
+  return {
+    canGenerate: false,
+    hasBase,
+    warning:
+      "Skipping: .vscode/settings.json is tracked.\n" +
+      "Use `clank vscode --force` to override, or migrate:\n" +
+      "  mv .vscode/settings.json .vscode/settings.base.json && git rm --cached .vscode/settings.json",
+  };
 }
 
 /** Generate VS Code settings to show clank files in search and explorer */
@@ -25,6 +114,19 @@ export async function vscodeCommand(options?: VscodeOptions): Promise<void> {
   if (options?.remove) {
     await removeVscodeSettings(targetRoot);
     return;
+  }
+
+  // Check if we can generate (tracking check)
+  const check = await checkVscodeTracking(targetRoot);
+  if (!check.canGenerate && !options?.force) {
+    console.log(check.warning);
+    return;
+  }
+
+  if (options?.force && !check.canGenerate) {
+    console.log(
+      "Note: settings.json is tracked, this will create uncommitted changes.\n",
+    );
   }
 
   await generateVscodeSettings(targetRoot);
@@ -70,10 +172,38 @@ export async function generateVscodeSettings(
   );
 }
 
+/** Regenerate settings.json from base+local only (remove clank additions) */
+async function removeLayeredSettings(
+  settingsPath: string,
+  layered: Record<string, unknown>,
+): Promise<void> {
+  delete layered["search.useIgnoreFiles"];
+
+  if (Object.keys(layered).length === 0) {
+    if (await fileExists(settingsPath)) {
+      await unlink(settingsPath);
+      console.log("Removed .vscode/settings.json (base+local were empty)");
+    }
+  } else {
+    await writeJsonFile(settingsPath, layered);
+    console.log(
+      "Regenerated .vscode/settings.json from base+local (removed clank patterns)",
+    );
+  }
+}
+
 /** Remove clank-generated VS Code settings */
 export async function removeVscodeSettings(targetRoot: string): Promise<void> {
   const settingsPath = join(targetRoot, ".vscode/settings.json");
 
+  // If layered settings exist, regenerate from base+local only
+  const layered = await readLayeredSettings(targetRoot);
+  if (layered) {
+    await removeLayeredSettings(settingsPath, layered);
+    return;
+  }
+
+  // Legacy mode: selectively remove clank patterns
   if (!(await fileExists(settingsPath))) {
     return;
   }
@@ -123,11 +253,30 @@ export async function isVscodeProject(targetRoot: string): Promise<boolean> {
   }
 }
 
-/** Merge clank exclude patterns with existing .vscode/settings.json */
+/** Merge clank exclude patterns with layered or existing settings */
 async function mergeVscodeSettings(
   targetRoot: string,
   excludePatterns: Record<string, boolean>,
 ): Promise<Record<string, unknown>> {
+  // Try layered settings first (base + local)
+  const layered = await readLayeredSettings(targetRoot);
+
+  if (layered) {
+    // Layered mode: base + local + clank
+    const layeredSearch =
+      (layered["search.exclude"] as Record<string, boolean>) || {};
+    const layeredFiles =
+      (layered["files.exclude"] as Record<string, boolean>) || {};
+
+    return {
+      ...layered,
+      "search.useIgnoreFiles": false,
+      "search.exclude": { ...layeredSearch, ...excludePatterns },
+      "files.exclude": { ...layeredFiles, ...excludePatterns },
+    };
+  }
+
+  // Legacy mode: read existing settings.json
   const settingsPath = join(targetRoot, ".vscode/settings.json");
 
   let existingSettings: Record<string, unknown> = {};
@@ -170,11 +319,17 @@ async function writeVscodeSettings(
   console.log(`Wrote ${settingsPath}`);
 }
 
-/** Add .vscode/settings.json to .git/info/exclude */
+/** Add .vscode/settings.json and settings.local.json to .git/info/exclude */
 async function addVscodeToGitExclude(targetRoot: string): Promise<void> {
   const settingsPath = join(targetRoot, ".vscode/settings.json");
-  if (await isTrackedByGit(settingsPath, targetRoot)) return;
-  await addToGitExclude(targetRoot, ".vscode/settings.json");
+  const localPath = join(targetRoot, ".vscode/settings.local.json");
+
+  if (!(await isTrackedByGit(settingsPath, targetRoot))) {
+    await addToGitExclude(targetRoot, ".vscode/settings.json");
+  }
+  if (!(await isTrackedByGit(localPath, targetRoot))) {
+    await addToGitExclude(targetRoot, ".vscode/settings.local.json");
+  }
 }
 
 /** Remove patterns from an exclude object, deleting the key if empty */
