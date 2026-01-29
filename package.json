@@ -1,7 +1,7 @@
 {
   "name": "clank-cli",
   "description": "Keep AI files in a separate overlay repository",
-  "version": "0.1.65",
+  "version": "0.1.66",
   "author": "",
   "type": "module",
   "bin": {
