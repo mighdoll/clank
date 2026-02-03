@@ -250,7 +250,7 @@ function showUnaddedFiles(
       `Found ${outsideOverlay.length} stale symlink(s) in ${targetName}:\n`,
     );
     console.log("These symlinks point outside the clank overlay.");
-    console.log("Remove them, then run `clank link` to recreate:\n");
+    console.log("Remove them manually, then run `clank link` to recreate:\n");
     for (const file of outsideOverlay) {
       console.log(`  rm ${relativePath(cwd, file.targetPath)}`);
     }
@@ -262,12 +262,11 @@ function showUnaddedFiles(
       `Found ${wrongMapping.length} mislinked symlink(s) in ${targetName}:\n`,
     );
     console.log("These symlinks point to the wrong overlay location.");
-    console.log("Remove them, then run `clank link` to recreate:\n");
+    console.log("Run `clank link` to fix them.\n");
     for (const file of wrongMapping) {
-      console.log(`  rm ${relativePath(cwd, file.targetPath)}`);
-      if (file.currentTarget && file.expectedTarget) {
+      console.log(`  ${relativePath(cwd, file.targetPath)}`);
+      if (file.currentTarget) {
         console.log(`    points to: ${file.currentTarget}`);
-        console.log(`    expected:  ${file.expectedTarget}`);
       }
     }
     console.log();

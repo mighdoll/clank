@@ -1,14 +1,16 @@
-import { lstat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { lstat, unlink } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import picomatch from "picomatch";
-import { managedAgentDirs } from "./AgentFiles.ts";
+import { managedAgentDirs, targetManagedDirs } from "./AgentFiles.ts";
 import {
   createSymlink,
   ensureDir,
   getLinkTarget,
+  isSymlink,
   resolveSymlinkTarget,
   walkDirectory,
 } from "./FsUtil.ts";
+import type { GitContext } from "./Git.ts";
 import {
   getPromptRelPath,
   type MapperContext,
@@ -138,4 +140,45 @@ function isMatchingPromptPath(
 ): boolean {
   const canonical = getPromptRelPath(canonicalPath);
   return canonical !== null && canonical === getPromptRelPath(actualPath);
+}
+
+/** Find and remove symlinks pointing to wrong worktree in the overlay.
+ *  Returns paths that were removed. */
+export async function cleanStaleWorktreeSymlinks(
+  targetRoot: string,
+  overlayRoot: string,
+  gitContext: GitContext,
+): Promise<string[]> {
+  const removed: string[] = [];
+  const currentWorktree = gitContext.worktreeName;
+  const projectName = gitContext.projectName;
+  const worktreesPrefix = `${overlayRoot}/targets/${projectName}/worktrees/`;
+
+  for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
+    if (isDirectory) continue;
+
+    const relPath = relative(targetRoot, path);
+    if (!isInManagedDir(relPath)) continue;
+    if (!(await isSymlink(path))) continue;
+
+    const target = await resolveSymlinkTarget(path);
+    if (!target.startsWith(worktreesPrefix)) continue;
+
+    // Extract worktree name from path like .../worktrees/main/clank/notes.md
+    const afterPrefix = target.slice(worktreesPrefix.length);
+    const worktreeName = afterPrefix.split("/")[0];
+
+    if (worktreeName && worktreeName !== currentWorktree) {
+      await unlink(path);
+      removed.push(relPath);
+    }
+  }
+
+  return removed;
+}
+
+/** Check if a path is inside a clank-managed directory */
+function isInManagedDir(relPath: string): boolean {
+  const parts = relPath.split("/");
+  return parts.some((part) => targetManagedDirs.includes(part));
 }

@@ -32,6 +32,7 @@ import {
   type TargetMapping,
 } from "../Mapper.ts";
 import {
+  cleanStaleWorktreeSymlinks,
   createPromptLinks as createPromptLinksShared,
   walkOverlayFiles,
 } from "../OverlayLinks.ts";
@@ -71,6 +72,19 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   const config = await loadConfig();
   const overlayRoot = expandPath(config.overlayRepo);
   await validateOverlayExists(overlayRoot);
+
+  // Clean up symlinks pointing to wrong worktree before linking
+  const staleRemoved = await cleanStaleWorktreeSymlinks(
+    targetRoot,
+    overlayRoot,
+    gitContext,
+  );
+  if (staleRemoved.length > 0) {
+    console.log(`\nCleaned ${staleRemoved.length} stale worktree symlink(s):`);
+    for (const path of staleRemoved) {
+      console.log(`  ${path}`);
+    }
+  }
 
   // Check for problematic agent files before proceeding
   await checkAgentFiles(targetRoot, overlayRoot);
