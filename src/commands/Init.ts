@@ -33,6 +33,7 @@ export async function initCommand(overlayPath?: string): Promise<void> {
   await ensureDir(join(targetPath, "targets"));
 
   await createDefaultTemplates(targetPath);
+  await writeFile(join(targetPath, ".gitignore"), ".DS_Store\n", "utf-8");
 
   await createDefaultConfig(targetPath);
 

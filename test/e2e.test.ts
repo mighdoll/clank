@@ -55,7 +55,8 @@ test.concurrent("init and link creates overlay and target structure", () =>
 
     const overlayStructure = await tree(ctx.overlayDir);
     expect(overlayStructure).toMatchInlineSnapshot(`
-      "├── global
+      "├── .gitignore
+      ├── global
       │   ├── clank
       │   ├── claude
       │   │   ├── agents
@@ -223,7 +224,8 @@ test.concurrent("add --worktree in git worktree creates branch-specific file", (
     // Validate overlay structure
     const overlayStructure = await tree(ctx.overlayDir);
     expect(overlayStructure).toMatchInlineSnapshot(`
-      "├── global
+      "├── .gitignore
+      ├── global
       │   ├── clank
       │   ├── claude
       │   │   ├── agents
@@ -283,7 +285,8 @@ test.concurrent("add from subdirectory creates correct overlay structure", () =>
     // Verify overlay structure - should NOT have double clank/
     const overlayStructure = await tree(ctx.overlayDir);
     expect(overlayStructure).toMatchInlineSnapshot(`
-      "├── global
+      "├── .gitignore
+      ├── global
       │   ├── clank
       │   ├── claude
       │   │   ├── agents
