@@ -1,4 +1,4 @@
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { managedAgentDirs } from "./AgentFiles.ts";
 import type { GitContext } from "./Git.ts";
 
@@ -147,6 +147,13 @@ export function normalizeAddPath(
 ): string {
   const normalized = input.replace(/^\.\//, "");
 
+  // Absolute paths are already resolved — just handle agent file aliasing
+  if (isAbsolute(normalized)) {
+    return isAgentFile(normalized)
+      ? join(dirname(normalized), "agents.md")
+      : normalized;
+  }
+
   // Treat agent files (CLAUDE.md, GEMINI.md) as aliases for agents.md
   // Support both relative paths (packages/foo/CLAUDE.md) and running from subdirectory
   if (isAgentFile(normalized)) {
@@ -156,19 +163,14 @@ export function normalizeAddPath(
   }
 
   // .claude/ and .gemini/ files keep their path (relative to git root)
-  for (const agentDir of managedAgentDirs) {
-    if (normalized.startsWith(`${agentDir}/`)) {
-      return join(gitRoot, normalized);
-    }
+  if (startsWithAgentDir(normalized)) {
+    return join(gitRoot, normalized);
   }
 
   // If cwd is inside a .claude/ or .gemini/ directory, join directly
   // (e.g., running `clank rm foo.md` from .claude/commands/)
-  const relCwd = relative(gitRoot, cwd);
-  for (const agentDir of managedAgentDirs) {
-    if (relCwd.startsWith(`${agentDir}/`) || relCwd === agentDir) {
-      return join(cwd, normalized);
-    }
+  if (isInsideAgentDir(relative(gitRoot, cwd))) {
+    return join(cwd, normalized);
   }
 
   // If path already contains /clank/ in the middle, preserve its structure
@@ -187,6 +189,18 @@ export function normalizeAddPath(
   const normalizedCwd = inClankSubdir ? cwd.slice(0, -"/clank".length) : cwd;
 
   return join(normalizedCwd, "clank", filename);
+}
+
+/** Check if path starts with a managed agent dir (.claude/, .gemini/) */
+function startsWithAgentDir(path: string): boolean {
+  return managedAgentDirs.some((dir) => path.startsWith(`${dir}/`));
+}
+
+/** Check if path is inside a managed agent dir (.claude/, .gemini/) */
+function isInsideAgentDir(relPath: string): boolean {
+  return managedAgentDirs.some(
+    (dir) => relPath.startsWith(`${dir}/`) || relPath === dir,
+  );
 }
 
 /** Check if a relative path contains a clank/ directory component */

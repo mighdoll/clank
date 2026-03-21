@@ -126,6 +126,21 @@ test("normalizeAddPath handles project named 'clank'", () => {
   );
 });
 
+test("normalizeAddPath handles absolute paths", () => {
+  expect(normalizeAddPath("/target/clank/notes.md", cwd, gitRoot)).toBe(
+    "/target/clank/notes.md",
+  );
+
+  expect(
+    normalizeAddPath("/target/packages/foo/clank/plan.md", cwd, gitRoot),
+  ).toBe("/target/packages/foo/clank/plan.md");
+
+  // Absolute agent file path gets aliased to agents.md
+  expect(normalizeAddPath("/target/CLAUDE.md", cwd, gitRoot)).toBe(
+    "/target/agents.md",
+  );
+});
+
 test("normalizeAddPath preserves paths with /clank/ in the middle", () => {
   // Path already contains /clank/ - don't add another prefix
   expect(normalizeAddPath("packages/foo/clank/notes.md", cwd, gitRoot)).toBe(
