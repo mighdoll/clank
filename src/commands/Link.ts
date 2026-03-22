@@ -20,6 +20,7 @@ import {
   getLinkTarget,
   isSymlink,
   isTrackedByGit,
+  toSlash,
 } from "../FsUtil.ts";
 import { type GitContext, getGitContext } from "../Git.ts";
 import {
@@ -160,7 +161,7 @@ async function collectMappings(
   const isAgent = ({ targetPath }: FileMapping) =>
     basename(targetPath) === "agents.md";
   const isPrompt = ({ targetPath }: FileMapping) =>
-    targetPath.includes("/.claude/prompts/");
+    toSlash(targetPath).includes("/.claude/prompts/");
 
   const agentsMappings = mappings.filter(isAgent);
   const promptsMappings = mappings.filter((m) => !isAgent(m) && isPrompt(m));
@@ -459,7 +460,7 @@ async function checkMappingParentExists(
   m: FileMapping,
   targetRoot: string,
 ): Promise<FileMapping | null> {
-  const relPath = relative(targetRoot, m.targetPath);
+  const relPath = toSlash(relative(targetRoot, m.targetPath));
   // Subdirectory clank files have /clank/ in the middle of the path
   const clankIndex = relPath.indexOf("/clank/");
   if (clankIndex !== -1) {

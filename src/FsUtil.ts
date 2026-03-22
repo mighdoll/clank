@@ -28,6 +28,11 @@ interface WalkContext {
   skip?: (relPath: string, isDirectory: boolean) => boolean;
 }
 
+/** Normalize path separators to forward slashes (for cross-platform string comparisons) */
+export function toSlash(p: string): string {
+  return p.replaceAll("\\", "/");
+}
+
 /**
  * Create a symbolic link, removing existing link/file first
  * @param target - The path the symlink should point to (absolute)
@@ -195,7 +200,7 @@ function* processEntry(
   | { recurse: string; options: WalkOptions; root: string }
 > {
   const fullPath = join(dir, entry.name);
-  const relPath = relative(ctx.root, fullPath);
+  const relPath = toSlash(relative(ctx.root, fullPath));
 
   if (entry.isDirectory()) {
     if (shouldSkipDir(entry.name, ctx.skipDirs, ctx.includeHidden)) return;

@@ -1,4 +1,4 @@
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { agentFiles } from "../../AgentFiles.ts";
 import { getPromptRelPath } from "../../Mapper.ts";
 import { partition } from "../../Util.ts";
@@ -15,9 +15,9 @@ export function dedupeEntries(
 
 /** Check if a relative path ends with an agent filename (CLAUDE.md, etc.) */
 export function isAgentFilePath(relPath: string): boolean {
-  const base = relPath.split("/").at(-1)?.toLowerCase();
-  if (!base) return false;
-  return agentFiles.some((f) => f.toLowerCase() === base);
+  return agentFiles.some(
+    (f) => f.toLowerCase() === basename(relPath).toLowerCase(),
+  );
 }
 
 /** Keep at most one agent file per directory, using the configured preference order. */
@@ -129,6 +129,5 @@ function mapPreference(
 }
 
 function basenameUpper(relPath: string): string {
-  const base = relPath.split("/").at(-1) ?? "";
-  return base.toUpperCase();
+  return basename(relPath).toUpperCase();
 }

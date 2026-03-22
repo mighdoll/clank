@@ -1,5 +1,6 @@
 import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { managedAgentDirs } from "./AgentFiles.ts";
+import { toSlash } from "./FsUtil.ts";
 import type { GitContext } from "./Git.ts";
 
 /** overlay mappings can be cross project, per project, or per worktree */
@@ -118,7 +119,7 @@ export function targetToOverlay(
   context: MapperContext,
 ): string {
   const { overlayRoot, targetRoot, gitContext } = context;
-  const relPath = relative(targetRoot, targetPath);
+  const relPath = toSlash(relative(targetRoot, targetPath));
 
   let overlayBase: string;
   if (scope === "global") {
@@ -145,7 +146,7 @@ export function normalizeAddPath(
   cwd: string,
   gitRoot: string,
 ): string {
-  const normalized = input.replace(/^\.\//, "");
+  const normalized = input.replace(/^\.[\\/]/, "");
 
   // Absolute paths are already resolved — just handle agent file aliasing
   if (isAbsolute(normalized)) {
@@ -169,7 +170,7 @@ export function normalizeAddPath(
 
   // If cwd is inside a .claude/ or .gemini/ directory, join directly
   // (e.g., running `clank rm foo.md` from .claude/commands/)
-  if (isInsideAgentDir(relative(gitRoot, cwd))) {
+  if (isInsideAgentDir(toSlash(relative(gitRoot, cwd)))) {
     return join(cwd, normalized);
   }
 
@@ -185,7 +186,7 @@ export function normalizeAddPath(
 
   // Strip trailing /clank from cwd to avoid clank/clank nesting
   // But don't strip if we're at the git root (project might be named "clank")
-  const inClankSubdir = cwd.endsWith("/clank") && cwd !== gitRoot;
+  const inClankSubdir = toSlash(cwd).endsWith("/clank") && cwd !== gitRoot;
   const normalizedCwd = inClankSubdir ? cwd.slice(0, -"/clank".length) : cwd;
 
   return join(normalizedCwd, "clank", filename);
@@ -216,8 +217,9 @@ export function isAgentFile(filename: string): boolean {
 
 /** Check if a path is a prompt file in an agent's prompts directory */
 export function isPromptFile(normalizedPath: string): boolean {
+  const p = toSlash(normalizedPath);
   for (const agentDir of managedAgentDirs) {
-    if (normalizedPath.includes(`/${agentDir}/prompts/`)) {
+    if (p.includes(`/${agentDir}/prompts/`)) {
       return true;
     }
   }
@@ -226,11 +228,12 @@ export function isPromptFile(normalizedPath: string): boolean {
 
 /** Extract the prompt-relative path from a full prompt path */
 export function getPromptRelPath(normalizedPath: string): string | null {
+  const p = toSlash(normalizedPath);
   for (const agentDir of managedAgentDirs) {
     const marker = `/${agentDir}/prompts/`;
-    const idx = normalizedPath.indexOf(marker);
+    const idx = p.indexOf(marker);
     if (idx !== -1) {
-      return normalizedPath.slice(idx + marker.length);
+      return p.slice(idx + marker.length);
     }
   }
   return null;
@@ -254,7 +257,7 @@ function mapGlobalOverlay(
   globalPrefix: string,
   targetRoot: string,
 ): TargetMapping | null {
-  const relPath = relative(globalPrefix, overlayPath);
+  const relPath = toSlash(relative(globalPrefix, overlayPath));
 
   // Skip init templates
   if (relPath.startsWith("init/")) return null;
@@ -269,12 +272,12 @@ function mapProjectOverlay(
   context: MapperContext,
 ): TargetMapping | null {
   const { targetRoot, gitContext } = context;
-  const relPath = relative(projectPrefix, overlayPath);
+  const relPath = toSlash(relative(projectPrefix, overlayPath));
 
   // Worktree-specific files
-  const worktreePrefix = join("worktrees", gitContext.worktreeName);
+  const worktreePrefix = `worktrees/${gitContext.worktreeName}`;
   if (relPath.startsWith(`${worktreePrefix}/`)) {
-    const innerPath = relative(worktreePrefix, relPath);
+    const innerPath = toSlash(relative(worktreePrefix, relPath));
     return decodeOverlayPath(innerPath, targetRoot, "worktree");
   }
 

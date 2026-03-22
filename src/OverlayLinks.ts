@@ -1,5 +1,5 @@
 import { lstat, unlink } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import picomatch from "picomatch";
 import { managedAgentDirs, targetManagedDirs } from "./AgentFiles.ts";
 import {
@@ -8,6 +8,7 @@ import {
   getLinkTarget,
   isSymlink,
   resolveSymlinkTarget,
+  toSlash,
   walkDirectory,
 } from "./FsUtil.ts";
 import type { GitContext } from "./Git.ts";
@@ -105,8 +106,7 @@ export async function* walkOverlayFiles(
   const skip = (relPath: string): boolean => {
     if (relPath.startsWith("clank/init/")) return true; // Skip templates
     if (!isIgnored) return false;
-    const basename = relPath.split("/").at(-1) ?? "";
-    return isIgnored(relPath) || isIgnored(basename);
+    return isIgnored(relPath) || isIgnored(basename(relPath));
   };
 
   const genEntries = walkDirectory(overlayRoot, { skip });
@@ -152,16 +152,16 @@ export async function cleanStaleWorktreeSymlinks(
   const removed: string[] = [];
   const currentWorktree = gitContext.worktreeName;
   const projectName = gitContext.projectName;
-  const worktreesPrefix = `${overlayRoot}/targets/${projectName}/worktrees/`;
+  const worktreesPrefix = `${toSlash(overlayRoot)}/targets/${projectName}/worktrees/`;
 
   for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
     if (isDirectory) continue;
 
-    const relPath = relative(targetRoot, path);
+    const relPath = toSlash(relative(targetRoot, path));
     if (!isInManagedDir(relPath)) continue;
     if (!(await isSymlink(path))) continue;
 
-    const target = await resolveSymlinkTarget(path);
+    const target = toSlash(await resolveSymlinkTarget(path));
     if (!target.startsWith(worktreesPrefix)) continue;
 
     // Extract worktree name from path like .../worktrees/main/clank/notes.md

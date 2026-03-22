@@ -1,6 +1,6 @@
 import { join, relative } from "node:path";
 import { expandPath, loadConfig } from "../../Config.ts";
-import { resolveSymlinkTarget, walkDirectory } from "../../FsUtil.ts";
+import { resolveSymlinkTarget, toSlash, walkDirectory } from "../../FsUtil.ts";
 import { getGitContext } from "../../Git.ts";
 import { isClankPath } from "../../Mapper.ts";
 import { isAgentFilePath } from "./Dedupe.ts";
@@ -146,7 +146,7 @@ function resolveScanRoot(
 ): string {
   if (!input) return targetRoot;
   const resolved = join(cwd, input);
-  const rel = normalizeRelPath(relative(targetRoot, resolved));
+  const rel = toSlash(relative(targetRoot, resolved));
   if (rel.startsWith("..")) {
     throw new Error(`Path is outside the git repository: ${input}`);
   }
@@ -178,7 +178,7 @@ async function maybeCreateEntry(
   opts: NormalizedFilesOptions,
   filePath: string,
 ): Promise<FileEntry | null> {
-  const targetRel = normalizeRelPath(relative(ctx.targetRoot, filePath));
+  const targetRel = toSlash(relative(ctx.targetRoot, filePath));
   if (!isManagedTargetPath(targetRel, opts.hidden)) return null;
   if (!passesDepthFilter(targetRel, opts.depth)) return null;
 
@@ -187,14 +187,10 @@ async function maybeCreateEntry(
 
   return {
     absolutePath: filePath,
-    cwdRelativePath: normalizeRelPath(relative(ctx.cwd, filePath) || "."),
+    cwdRelativePath: toSlash(relative(ctx.cwd, filePath) || "."),
     targetRelativePath: targetRel,
     link,
   };
-}
-
-function normalizeRelPath(p: string): string {
-  return p.replaceAll("\\", "/");
 }
 
 /** Decide whether a target-relative path is managed by clank for listing. */
@@ -263,16 +259,16 @@ function inferScopeFromOverlay(
   overlayRoot: string,
   gitContext: Awaited<ReturnType<typeof getGitContext>>,
 ): "global" | "project" | "worktree" | null {
-  const globalPrefix = `${join(overlayRoot, "global")}/`;
-  if (overlayPath.startsWith(globalPrefix)) return "global";
+  const op = toSlash(overlayPath);
+  const globalPrefix = `${toSlash(join(overlayRoot, "global"))}/`;
+  if (op.startsWith(globalPrefix)) return "global";
 
   const { projectName, worktreeName } = gitContext;
-  const projectPath = join(overlayRoot, "targets", projectName);
-  const worktreePath = join(projectPath, "worktrees", worktreeName);
-  if (overlayPath.startsWith(`${worktreePath}/`)) return "worktree";
+  const projectBase = toSlash(join(overlayRoot, "targets", projectName));
+  const worktreePrefix = `${projectBase}/worktrees/${worktreeName}/`;
+  if (op.startsWith(worktreePrefix)) return "worktree";
 
-  const projectPrefix = `${projectPath}/`;
-  if (overlayPath.startsWith(projectPrefix)) return "project";
+  if (op.startsWith(`${projectBase}/`)) return "project";
 
   return null;
 }

@@ -7,7 +7,7 @@ import {
   formatAgentFileProblems,
 } from "../ClassifyFiles.ts";
 import { expandPath, loadConfig } from "../Config.ts";
-import { fileExists, relativePath, walkDirectory } from "../FsUtil.ts";
+import { fileExists, relativePath, toSlash, walkDirectory } from "../FsUtil.ts";
 import { type GitContext, getGitContext } from "../Git.ts";
 import { type MapperContext, overlayProjectDir } from "../Mapper.ts";
 import { formatStatusLines, getOverlayStatus } from "../OverlayGit.ts";
@@ -59,7 +59,7 @@ export async function findUnaddedFiles(
   for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
     if (isDirectory) continue;
 
-    const relPath = relative(targetRoot, path);
+    const relPath = toSlash(relative(targetRoot, path));
     if (!isInManagedDir(relPath)) continue;
     if (isLocalOnlyFile(relPath)) continue;
 
@@ -91,7 +91,7 @@ export async function findOrphans(
 
   const skip = (relPath: string): boolean => {
     if (isIgnored) {
-      const pathBasename = relPath.split("/").at(-1) ?? "";
+      const pathBasename = basename(relPath);
       if (isIgnored(relPath) || isIgnored(pathBasename)) return true;
     }
     return false;
@@ -103,7 +103,7 @@ export async function findOrphans(
   })) {
     if (isDirectory) continue;
 
-    const relPath = relative(projectDir, path);
+    const relPath = toSlash(relative(projectDir, path));
 
     // Skip files at project root (agents.md, settings.json)
     if (!relPath.includes("/")) continue;
