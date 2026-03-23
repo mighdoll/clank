@@ -161,6 +161,26 @@ test("findUnaddedFiles ignores settings.local.json", async () => {
   ]);
 });
 
+test("findUnaddedFiles ignores files matching overlay .gitignore", async () => {
+  // Create overlay .gitignore with patterns
+  await writeFile(join(ctx.overlayDir, ".gitignore"), ".DS_Store\n.obsidian\n");
+
+  // Create managed dir with both ignored and non-ignored files
+  const targetClaude = join(ctx.targetDir, ".claude");
+  await mkdir(targetClaude);
+  await writeFile(join(targetClaude, ".DS_Store"), "binary junk");
+  await writeFile(join(targetClaude, "unadded.md"), "real content");
+
+  const result = await findUnaddedFiles(createMapperContext(ctx));
+  expect(result).toEqual([
+    {
+      targetPath: join(ctx.targetDir, ".claude/unadded.md"),
+      relativePath: ".claude/unadded.md",
+      kind: "unadded",
+    },
+  ]);
+});
+
 test("findUnaddedFiles detects symlinks pointing outside overlay", async () => {
   // Create a file outside the overlay
   const outsideFile = join(ctx.targetDir, "outside.md");

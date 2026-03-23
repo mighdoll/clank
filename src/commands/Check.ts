@@ -15,6 +15,7 @@ import {
   walkDirectory,
 } from "../FsUtil.ts";
 import { type GitContext, getGitContext } from "../Git.ts";
+import { loadGitignore } from "../Gitignore.ts";
 import { type MapperContext, overlayProjectDir } from "../Mapper.ts";
 import { formatStatusLines, getOverlayStatus } from "../OverlayGit.ts";
 import { type ManagedFileState, verifyManaged } from "../OverlayLinks.ts";
@@ -59,8 +60,9 @@ export async function checkCommand(): Promise<void> {
 export async function findUnaddedFiles(
   context: MapperContext,
 ): Promise<UnaddedFile[]> {
-  const { targetRoot } = context;
+  const { targetRoot, overlayRoot } = context;
   const unadded: UnaddedFile[] = [];
+  const isIgnored = await loadGitignore(overlayRoot);
 
   for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
     if (isDirectory) continue;
@@ -68,6 +70,7 @@ export async function findUnaddedFiles(
     const relPath = toSlash(relative(targetRoot, path));
     if (!isInManagedDir(relPath)) continue;
     if (isLocalOnlyFile(relPath)) continue;
+    if (isIgnored(basename(relPath))) continue;
 
     const managed = await verifyManaged(path, context);
     if (managed.kind !== "valid") {
