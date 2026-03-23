@@ -1080,8 +1080,8 @@ test.concurrent("add .claude/prompts/ creates symlinks in both .claude and .gemi
     // Verify both symlinks point to the same overlay file
     const claudeTarget = await readlink(claudeSymlink);
     const geminiTarget = await readlink(geminiSymlink);
-    expect(claudeTarget).toContain("prompts/manifest.md");
-    expect(geminiTarget).toContain("prompts/manifest.md");
+    expect(claudeTarget.replaceAll("\\", "/")).toContain("prompts/manifest.md");
+    expect(geminiTarget.replaceAll("\\", "/")).toContain("prompts/manifest.md");
   }));
 
 test.concurrent("link recreates prompt symlinks in both agent directories", () =>

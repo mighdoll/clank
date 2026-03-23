@@ -162,7 +162,7 @@ test.concurrent("mv moves file from project to global scope", () =>
     const linkPath = join(ctx.targetDir, "clank/style.md");
     expect((await lstat(linkPath)).isSymbolicLink()).toBe(true);
     const target = await readlink(linkPath);
-    expect(target).toContain("/global/");
+    expect(target.replaceAll("\\", "/")).toContain("/global/");
   }));
 
 test.concurrent("mv moves file from global to project scope", () =>
@@ -187,7 +187,7 @@ test.concurrent("mv moves file from global to project scope", () =>
     // Symlink should point to project overlay
     const linkPath = join(ctx.targetDir, "clank/guide.md");
     const target = await readlink(linkPath);
-    expect(target).toContain("/targets/my-project/");
+    expect(target.replaceAll("\\", "/")).toContain("/targets/my-project/");
   }));
 
 test.concurrent("mv reports when file already in target scope", () =>
