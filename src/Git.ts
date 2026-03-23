@@ -1,5 +1,6 @@
 import { basename, isAbsolute, join } from "node:path";
 import { exec } from "./Exec.ts";
+import { resolveWindowsPath } from "./FsUtil.ts";
 
 /** Selected git project/worktree metadata */
 export interface GitContext {
@@ -34,7 +35,9 @@ export async function detectGitRoot(
 ): Promise<string> {
   const toplevel = await gitCommand("rev-parse --show-toplevel", cwd);
   if (toplevel) {
-    return toplevel;
+    // On Windows, git returns forward-slash paths that may use long names
+    // while cwd uses 8.3 short names. Resolve to canonical form.
+    return await resolveWindowsPath(toplevel);
   }
   throw new Error("Not in a git repository");
 }

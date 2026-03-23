@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readdir,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -49,7 +50,12 @@ export async function tree(
 
 /** Set up a test environment with temp directories and git repo */
 export async function setupTestEnvironment(): Promise<TestContext> {
-  const tempDir = await mkdtemp(join(tmpdir(), "clank-test-"));
+  // On Windows, tmpdir() returns 8.3 short names (e.g., RUNNER~1) but
+  // git rev-parse returns long names. Resolve to canonical form so all
+  // paths are consistent.
+  const tmp =
+    process.platform === "win32" ? await realpath(tmpdir()) : tmpdir();
+  const tempDir = await mkdtemp(join(tmp, "clank-test-"));
   const overlayDir = join(tempDir, "overlay");
   const targetDir = join(tempDir, "project");
   const configPath = join(tempDir, "config.js");

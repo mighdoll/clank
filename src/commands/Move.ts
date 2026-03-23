@@ -6,6 +6,7 @@ import {
   createSymlink,
   ensureDir,
   fileExists,
+  getCwd,
   getLinkTarget,
 } from "../FsUtil.ts";
 import { getGitContext } from "../Git.ts";
@@ -37,7 +38,7 @@ export async function moveCommand(
   options: MoveOptions,
 ): Promise<void> {
   const hasScope = options.global || options.project || options.worktree;
-  const cwd = process.cwd();
+  const cwd = await getCwd();
   const gitContext = await getGitContext(cwd);
   const config = await loadConfig();
   const overlayRoot = expandPath(config.overlayRepo);

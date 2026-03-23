@@ -2,7 +2,7 @@ import { rm, unlink } from "node:fs/promises";
 import { basename, dirname, relative } from "node:path";
 import { forEachAgentPath } from "../AgentFiles.ts";
 import { expandPath, loadConfig, validateOverlayExists } from "../Config.ts";
-import { fileExists } from "../FsUtil.ts";
+import { fileExists, getCwd } from "../FsUtil.ts";
 import { getGitContext } from "../Git.ts";
 import {
   isAgentFile,
@@ -23,7 +23,7 @@ export async function rmCommand(
   filePaths: string[],
   options: RmOptions = {},
 ): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = await getCwd();
   const gitContext = await getGitContext(cwd);
   const config = await loadConfig();
   const overlayRoot = expandPath(config.overlayRepo);

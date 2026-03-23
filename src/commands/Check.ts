@@ -7,7 +7,13 @@ import {
   formatAgentFileProblems,
 } from "../ClassifyFiles.ts";
 import { expandPath, loadConfig } from "../Config.ts";
-import { fileExists, relativePath, toSlash, walkDirectory } from "../FsUtil.ts";
+import {
+  fileExists,
+  getCwd,
+  relativePath,
+  toSlash,
+  walkDirectory,
+} from "../FsUtil.ts";
 import { type GitContext, getGitContext } from "../Git.ts";
 import { type MapperContext, overlayProjectDir } from "../Mapper.ts";
 import { formatStatusLines, getOverlayStatus } from "../OverlayGit.ts";
@@ -33,7 +39,7 @@ const localOnlyFiles = ["settings.local.json"];
 
 /** Check for orphaned overlay paths that don't match target structure */
 export async function checkCommand(): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = await getCwd();
   const gitContext = await getGitContext(cwd);
   const config = await loadConfig();
   const overlayRoot = expandPath(config.overlayRepo);

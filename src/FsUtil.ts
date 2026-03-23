@@ -5,6 +5,7 @@ import {
   readdir,
   readFile,
   readlink,
+  realpath,
   symlink,
   unlink,
   writeFile,
@@ -31,6 +32,22 @@ interface WalkContext {
 /** Normalize path separators to forward slashes (for cross-platform string comparisons) */
 export function toSlash(p: string): string {
   return p.replaceAll("\\", "/");
+}
+
+/** Resolve Windows 8.3 short names to canonical long paths.
+ *  On non-Windows, returns the path unchanged. */
+export async function resolveWindowsPath(p: string): Promise<string> {
+  if (process.platform !== "win32") return p;
+  try {
+    return await realpath(p);
+  } catch {
+    return p;
+  }
+}
+
+/** Get the current working directory, resolving Windows 8.3 short names */
+export async function getCwd(): Promise<string> {
+  return resolveWindowsPath(process.cwd());
 }
 
 /**
@@ -84,12 +101,13 @@ export async function removeSymlink(linkPath: string): Promise<void> {
 
 /**
  * Get the symlink target path (absolute)
+ * Uses forward slashes so readlink returns consistent paths across platforms.
  * @param _from - The location of the symlink (unused, kept for API compatibility)
  * @param to - The target of the symlink (absolute)
  * @returns Absolute path to the target
  */
 export function getLinkTarget(_from: string, to: string): string {
-  return to;
+  return toSlash(to);
 }
 
 /** Recursively walk a directory, yielding all files and directories */

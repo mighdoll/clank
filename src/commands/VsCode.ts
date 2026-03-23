@@ -5,6 +5,7 @@ import { addToGitExclude } from "../Exclude.ts";
 import {
   ensureDir,
   fileExists,
+  getCwd,
   isTrackedByGit,
   writeJsonFile,
 } from "../FsUtil.ts";
@@ -109,7 +110,7 @@ export async function checkVscodeTracking(
 
 /** Generate VS Code settings to show clank files in search and explorer */
 export async function vscodeCommand(options?: VscodeOptions): Promise<void> {
-  const targetRoot = await detectGitRoot(process.cwd());
+  const targetRoot = await detectGitRoot(await getCwd());
 
   if (options?.remove) {
     await removeVscodeSettings(targetRoot);

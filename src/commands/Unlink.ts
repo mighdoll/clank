@@ -1,13 +1,13 @@
 import { expandPath, loadConfig } from "../Config.ts";
 import { removeGitExcludes } from "../Exclude.ts";
-import { fileExists, removeSymlink, walkDirectory } from "../FsUtil.ts";
+import { fileExists, getCwd, removeSymlink, walkDirectory } from "../FsUtil.ts";
 import { getGitContext } from "../Git.ts";
 import { isSymlinkToOverlay } from "../OverlayLinks.ts";
 import { removeVscodeSettings } from "./VsCode.ts";
 
 /** Remove all symlinks pointing to overlay repository */
 export async function unlinkCommand(targetDir?: string): Promise<void> {
-  const gitContext = await getGitContext(targetDir || process.cwd());
+  const gitContext = await getGitContext(targetDir || (await getCwd()));
   const targetRoot = gitContext.gitRoot;
 
   console.log(`Removing clank symlinks from: ${targetRoot}\n`);

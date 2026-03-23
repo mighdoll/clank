@@ -149,13 +149,13 @@ export function normalizeAddPath(
   cwd: string,
   gitRoot: string,
 ): string {
-  const normalized = input.replace(/^\.[\\/]/, "");
+  // Normalize separators: strip leading ./ or .\ then use forward slashes
+  // for consistent string matching (path.join handles both on Windows)
+  const normalized = input.replace(/^\.[\\/]/, "").replaceAll("\\", "/");
 
   // Absolute paths are already resolved — just handle agent file aliasing
-  if (isAbsolute(normalized)) {
-    return isAgentFile(normalized)
-      ? join(dirname(normalized), "agents.md")
-      : normalized;
+  if (isAbsolute(input)) {
+    return isAgentFile(normalized) ? join(dirname(input), "agents.md") : input;
   }
 
   // Treat agent files (CLAUDE.md, GEMINI.md) as aliases for agents.md

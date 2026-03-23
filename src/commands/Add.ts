@@ -13,6 +13,7 @@ import {
   createSymlink,
   ensureDir,
   fileExists,
+  getCwd,
   getLinkTarget,
   isSymlink,
   isTrackedByGit,
@@ -81,7 +82,7 @@ export async function addCommand(
   filePaths: string[],
   options: AddOptions = {},
 ): Promise<void> {
-  const cwd = process.cwd();
+  const cwd = await getCwd();
   const gitContext = await getGitContext(cwd);
   const config = await loadConfig();
   const overlayRoot = expandPath(config.overlayRepo);

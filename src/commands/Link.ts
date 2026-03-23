@@ -17,6 +17,7 @@ import {
   createSymlink,
   ensureDir,
   fileExists,
+  getCwd,
   getLinkTarget,
   isSymlink,
   isTrackedByGit,
@@ -65,7 +66,7 @@ interface SeparatedMappings {
 
 /** Link overlay repository to target directory */
 export async function linkCommand(targetDir?: string): Promise<void> {
-  const gitContext = await getGitContext(targetDir || process.cwd());
+  const gitContext = await getGitContext(targetDir || (await getCwd()));
   const targetRoot = gitContext.gitRoot;
   console.log(`Linking clank overlay to: ${targetRoot}\n`);
   logGitContext(gitContext);
@@ -128,7 +129,7 @@ async function checkAgentFiles(
   const classification = await classifyAgentFiles(targetRoot, overlayRoot);
 
   if (agentFileProblems(classification)) {
-    throw new Error(formatAgentFileProblems(classification, process.cwd()));
+    throw new Error(formatAgentFileProblems(classification, await getCwd()));
   }
 }
 

@@ -1,6 +1,11 @@
 import { join, relative } from "node:path";
 import { expandPath, loadConfig } from "../../Config.ts";
-import { resolveSymlinkTarget, toSlash, walkDirectory } from "../../FsUtil.ts";
+import {
+  getCwd,
+  resolveSymlinkTarget,
+  toSlash,
+  walkDirectory,
+} from "../../FsUtil.ts";
 import { getGitContext } from "../../Git.ts";
 import { isClankPath } from "../../Mapper.ts";
 import { isAgentFilePath } from "./Dedupe.ts";
@@ -76,7 +81,7 @@ interface NotLinkedToOverlay {
 export async function getFilesContext(
   inputPath?: string,
 ): Promise<FilesContext> {
-  const cwd = process.cwd();
+  const cwd = await getCwd();
   const gitContext = await getGitContext(cwd);
   const targetRoot = gitContext.gitRoot;
   const scanRoot = resolveScanRoot(targetRoot, cwd, inputPath);
