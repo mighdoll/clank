@@ -50,7 +50,24 @@ export async function createSymlink(
     // File doesn't exist, which is fine
   }
 
-  await symlink(target, linkPath);
+  try {
+    await symlink(target, linkPath);
+  } catch (error: unknown) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "EPERM" &&
+      process.platform === "win32"
+    ) {
+      throw new Error(
+        `Permission denied creating symlink.\n` +
+          `On Windows, symlinks require Developer Mode or administrator privileges.\n` +
+          `Enable Developer Mode: Settings > Update & Security > For Developers\n` +
+          `Or use clank from WSL.`,
+      );
+    }
+    throw error;
+  }
 }
 
 /** Remove a symlink if it exists */
