@@ -45,7 +45,7 @@ export async function verifyManaged(
     const absoluteTarget = await resolveSymlinkTarget(linkPath);
 
     // Check if symlink points to overlay at all
-    if (!absoluteTarget.startsWith(overlayRoot)) {
+    if (!toSlash(absoluteTarget).startsWith(toSlash(overlayRoot))) {
       return { kind: "outside-overlay", currentTarget: absoluteTarget };
     }
 
@@ -89,7 +89,7 @@ export async function isSymlinkToOverlay(
     }
 
     const absoluteTarget = await resolveSymlinkTarget(linkPath);
-    return absoluteTarget.startsWith(overlayRoot);
+    return toSlash(absoluteTarget).startsWith(toSlash(overlayRoot));
   } catch {
     return false;
   }

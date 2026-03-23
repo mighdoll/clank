@@ -89,7 +89,7 @@ export async function isGitWorktree(
   }
 
   // Worktrees have .git/worktrees/* in their git-dir path
-  return gitDir.includes("/worktrees/");
+  return gitDir.replaceAll("\\", "/").includes("/worktrees/");
 }
 
 /** Parse repository name from git remote URL (handles HTTPS and SSH formats) */

@@ -216,7 +216,8 @@ async function classifyLink(
 ): Promise<LinkState> {
   try {
     const overlayPath = await resolveSymlinkTarget(filePath);
-    if (!overlayPath.startsWith(overlayRoot)) return { kind: "unlinked" };
+    if (!toSlash(overlayPath).startsWith(toSlash(overlayRoot)))
+      return { kind: "unlinked" };
     const scope = inferScopeFromOverlay(overlayPath, overlayRoot, gitContext);
     if (!scope) return { kind: "unlinked" };
     return { kind: "linked", overlayPath, scope };

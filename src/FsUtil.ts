@@ -123,7 +123,7 @@ export async function isTrackedByGit(
   repoRoot: string,
 ): Promise<boolean> {
   try {
-    const relPath = relative(repoRoot, filePath);
+    const relPath = toSlash(relative(repoRoot, filePath));
     await execFileAsync("git", ["ls-files", "--error-unmatch", relPath], {
       cwd: repoRoot,
     });

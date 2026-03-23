@@ -84,14 +84,17 @@ export function overlayToTarget(
   context: MapperContext,
 ): TargetMapping | null {
   const { overlayRoot, targetRoot, gitContext } = context;
-  const projectPrefix = join(overlayRoot, "targets", gitContext.projectName);
-  const globalPrefix = join(overlayRoot, "global");
+  const op = toSlash(overlayPath);
+  const projectPrefix = toSlash(
+    join(overlayRoot, "targets", gitContext.projectName),
+  );
+  const globalPrefix = toSlash(join(overlayRoot, "global"));
 
-  if (overlayPath.startsWith(globalPrefix)) {
+  if (op.startsWith(globalPrefix)) {
     return mapGlobalOverlay(overlayPath, globalPrefix, targetRoot);
   }
 
-  if (overlayPath.startsWith(projectPrefix)) {
+  if (op.startsWith(projectPrefix)) {
     return mapProjectOverlay(overlayPath, projectPrefix, context);
   }
 

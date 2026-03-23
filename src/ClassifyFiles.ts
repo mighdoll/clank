@@ -5,6 +5,7 @@ import {
   isTrackedByGit,
   relativePath,
   resolveSymlinkTarget,
+  toSlash,
   walkDirectory,
 } from "./FsUtil.ts";
 import type { GitContext } from "./Git.ts";
@@ -180,7 +181,7 @@ async function classifyAgentSymlink(
   const absoluteTarget = await resolveSymlinkTarget(filePath);
 
   // Symlink doesn't point to overlay at all
-  if (!absoluteTarget.startsWith(overlayRoot)) {
+  if (!toSlash(absoluteTarget).startsWith(toSlash(overlayRoot))) {
     return { staleSymlinks: [filePath] };
   }
 

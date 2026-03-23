@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { agentFiles, targetManagedDirs } from "./AgentFiles.ts";
 import { filterClankLines } from "./Exclude.ts";
-import { fileExists, walkDirectory } from "./FsUtil.ts";
+import { fileExists, toSlash, walkDirectory } from "./FsUtil.ts";
 import { getGitDir } from "./Git.ts";
 import { partition } from "./Util.ts";
 
@@ -52,7 +52,7 @@ export async function collectGitignorePatterns(
 
   // 3. Find nested .gitignore files
   for (const path of await findNestedGitignores(targetRoot)) {
-    const basePath = relative(targetRoot, dirname(path));
+    const basePath = toSlash(relative(targetRoot, dirname(path)));
     await parseGitignoreFile(path, result, { basePath });
   }
 
