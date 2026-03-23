@@ -283,8 +283,11 @@ function showUnaddedFiles(
       `Found ${regularFiles.length} unadded file(s) in ${targetName}:\n`,
     );
     for (const file of regularFiles) {
-      console.log(`  clank add ${relativePath(cwd, file.targetPath)}`);
+      console.log(`  ${relativePath(cwd, file.targetPath)}`);
     }
+    console.log();
+    console.log("  clank add -i                  # add interactively");
+    console.log("  clank add <file> [<file>...]  # add specific files");
     console.log();
   }
 }
