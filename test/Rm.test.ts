@@ -1,10 +1,8 @@
 import { rm as fsRm, lstat, mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { execa } from "execa";
 import { expect, test } from "vitest";
-import { clank, type TestContext, withTestEnv } from "./Helpers.ts";
-
-const clankBin = resolve("./bin/clank.ts");
+import { clank, clankExec, type TestContext, withTestEnv } from "./Helpers.ts";
 
 /** Get path in overlay for current project */
 function overlay(ctx: TestContext, ...segments: string[]) {
@@ -12,7 +10,7 @@ function overlay(ctx: TestContext, ...segments: string[]) {
 }
 
 async function initAndLink(ctx: TestContext): Promise<void> {
-  await execa(clankBin, ["init", ctx.overlayDir, "--config", ctx.configPath]);
+  await clankExec(["init", ctx.overlayDir, "--config", ctx.configPath]);
   await clank(ctx, "link");
 }
 
@@ -138,7 +136,7 @@ test.concurrent("rm errors when file does not exist", () =>
 test.concurrent("rm errors when file in multiple scopes without flag", () =>
   withTestEnv(async (ctx) => {
     // Initialize overlay
-    await execa(clankBin, ["init", ctx.overlayDir, "--config", ctx.configPath]);
+    await clankExec(["init", ctx.overlayDir, "--config", ctx.configPath]);
 
     // Create a feature branch in main repo
     await execa({ cwd: ctx.targetDir })`git branch feature-bar`;
@@ -151,7 +149,7 @@ test.concurrent("rm errors when file in multiple scopes without flag", () =>
 
     const clankWorktree = (command: string) => {
       const args = command.split(" ");
-      return execa(clankBin, [...args, "--config", ctx.configPath], {
+      return clankExec([...args, "--config", ctx.configPath], {
         cwd: worktreeDir,
       });
     };
@@ -188,7 +186,7 @@ test.concurrent("rm works from subdirectory", () =>
     await mkdir(subDir, { recursive: true });
 
     // Add file from subdirectory
-    await execa(clankBin, ["add", "notes.md", "--config", ctx.configPath], {
+    await clankExec(["add", "notes.md", "--config", ctx.configPath], {
       cwd: subDir,
     });
 
@@ -196,7 +194,7 @@ test.concurrent("rm works from subdirectory", () =>
     expect((await lstat(overlayPath)).isFile()).toBe(true);
 
     // Remove from subdirectory
-    await execa(clankBin, ["rm", "notes.md", "--config", ctx.configPath], {
+    await clankExec(["rm", "notes.md", "--config", ctx.configPath], {
       cwd: subDir,
     });
 

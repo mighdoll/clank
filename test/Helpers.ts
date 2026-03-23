@@ -57,8 +57,9 @@ export async function setupTestEnvironment(): Promise<TestContext> {
   await mkdir(targetDir, { recursive: true });
 
   // Create config pointing to test overlay
+  // Use forward slashes so the path works on Windows too
   const configContent = `export default {
-  overlayRepo: "${overlayDir}",
+  overlayRepo: "${overlayDir.replaceAll("\\", "/")}",
   agents: ["agents", "claude", "gemini"]
 };
 `;
@@ -95,13 +96,19 @@ export async function withTestEnv(
 }
 
 const clankBin = resolve("./bin/clank.ts");
+const nodeArgs = ["--experimental-strip-types", clankBin];
 
 /** Run clank command in target directory */
 export function clank(ctx: TestContext, command: string) {
   const args = command.split(" ");
-  return execa(clankBin, [...args, "--config", ctx.configPath], {
+  return execa("node", [...nodeArgs, ...args, "--config", ctx.configPath], {
     cwd: ctx.targetDir,
   });
+}
+
+/** Run clank binary with explicit args and options (for non-standard invocations) */
+export function clankExec(args: string[], options?: { cwd?: string }) {
+  return execa("node", [...nodeArgs, ...args], options);
 }
 
 /** Check if path is a symlink */

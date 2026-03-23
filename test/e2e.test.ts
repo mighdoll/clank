@@ -6,11 +6,12 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { execa } from "execa";
 import { expect, test } from "vitest";
 import {
   clank,
+  clankExec,
   isSymlink,
   pathExists,
   type TestContext,
@@ -18,15 +19,13 @@ import {
   withTestEnv,
 } from "./Helpers.ts";
 
-const clankBin = resolve("./bin/clank.ts");
-
 /** Get path in overlay for current project */
 function overlay(ctx: TestContext, ...segments: string[]) {
   return join(ctx.overlayDir, "targets/my-project", ...segments);
 }
 
 async function initAndLink(ctx: TestContext): Promise<void> {
-  await execa(clankBin, ["init", ctx.overlayDir, "--config", ctx.configPath]);
+  await clankExec(["init", ctx.overlayDir, "--config", ctx.configPath]);
   await clank(ctx, "link");
 }
 
@@ -115,7 +114,7 @@ test.concurrent("link recreates subdirectory agent symlinks", () =>
     await mkdir(subDir, { recursive: true });
 
     // Run clank add from subdirectory
-    await execa(clankBin, ["add", "CLAUDE.md", "--config", ctx.configPath], {
+    await clankExec(["add", "CLAUDE.md", "--config", ctx.configPath], {
       cwd: subDir,
     });
 
@@ -194,7 +193,7 @@ test.concurrent("unlink removes symlinks", () =>
 test.concurrent("add --worktree in git worktree creates branch-specific file", () =>
   withTestEnv(async (ctx) => {
     // Initialize overlay
-    await execa(clankBin, ["init", ctx.overlayDir, "--config", ctx.configPath]);
+    await clankExec(["init", ctx.overlayDir, "--config", ctx.configPath]);
 
     // Create a feature branch in main repo
     await execa({ cwd: ctx.targetDir })`git branch feature-foo`;
@@ -208,7 +207,7 @@ test.concurrent("add --worktree in git worktree creates branch-specific file", (
     // Helper to run clank in worktree
     const clankWorktree = (command: string) => {
       const args = command.split(" ");
-      return execa(clankBin, [...args, "--config", ctx.configPath], {
+      return clankExec([...args, "--config", ctx.configPath], {
         cwd: worktreeDir,
       });
     };
@@ -280,7 +279,7 @@ test.concurrent("add from subdirectory creates correct overlay structure", () =>
 
     // Run clank add from subdirectory
     const args = ["add", "notes.md", "--config", ctx.configPath];
-    await execa(clankBin, args, { cwd: subDir });
+    await clankExec(args, { cwd: subDir });
 
     // Verify overlay structure - should NOT have double clank/
     const overlayStructure = await tree(ctx.overlayDir);
@@ -325,7 +324,7 @@ test.concurrent("link recreates subdirectory clank symlinks", () =>
     await mkdir(subDir, { recursive: true });
 
     // Add file from subdirectory
-    await execa(clankBin, ["add", "notes.md", "--config", ctx.configPath], {
+    await clankExec(["add", "notes.md", "--config", ctx.configPath], {
       cwd: subDir,
     });
 
@@ -463,7 +462,7 @@ test.concurrent("add symlink preserves symlink target in overlay", () =>
 test.concurrent("errors on tracked CLAUDE.md with conversion instructions", () =>
   withTestEnv(async (ctx) => {
     // Initialize overlay
-    await execa(clankBin, ["init", ctx.overlayDir, "--config", ctx.configPath]);
+    await clankExec(["init", ctx.overlayDir, "--config", ctx.configPath]);
 
     // Create and track CLAUDE.md in the target repo
     const claudePath = join(ctx.targetDir, "CLAUDE.md");
@@ -487,7 +486,7 @@ test.concurrent("errors on tracked CLAUDE.md with conversion instructions", () =
 test.concurrent("errors on untracked CLAUDE.md with add instructions", () =>
   withTestEnv(async (ctx) => {
     // Initialize overlay
-    await execa(clankBin, ["init", ctx.overlayDir, "--config", ctx.configPath]);
+    await clankExec(["init", ctx.overlayDir, "--config", ctx.configPath]);
 
     // Create untracked CLAUDE.md in the target repo
     const claudePath = join(ctx.targetDir, "CLAUDE.md");
@@ -512,8 +511,7 @@ test.concurrent("clank add with path works for subdirectory agent files", () =>
     await mkdir(subDir, { recursive: true });
 
     // Run clank add with path from git root
-    await execa(
-      clankBin,
+    await clankExec(
       ["add", "packages/foo/CLAUDE.md", "--config", ctx.configPath],
       { cwd: ctx.targetDir },
     );
@@ -531,7 +529,7 @@ test.concurrent("clank add with path works for subdirectory agent files", () =>
 
 test.concurrent("init creates git repo with initial commit", () =>
   withTestEnv(async (ctx) => {
-    await execa(clankBin, ["init", ctx.overlayDir, "--config", ctx.configPath]);
+    await clankExec(["init", ctx.overlayDir, "--config", ctx.configPath]);
 
     // Verify git repo exists and has initial commit
     const { stdout: log } = await execa({
@@ -581,8 +579,7 @@ test.concurrent("commit with -m flag uses custom message", () =>
     await writeFile(archPath, "# Architecture\n", "utf-8");
 
     // Run clank commit with message
-    await execa(
-      clankBin,
+    await clankExec(
       ["commit", "-m", "add architecture docs", "--config", ctx.configPath],
       { cwd: ctx.targetDir },
     );
@@ -615,7 +612,7 @@ test.concurrent("link warns about orphaned paths", () =>
     // Create a subdirectory structure in target and add a file
     const subDir = join(ctx.targetDir, "packages/foo");
     await mkdir(subDir, { recursive: true });
-    await execa(clankBin, ["add", "notes.md", "--config", ctx.configPath], {
+    await clankExec(["add", "notes.md", "--config", ctx.configPath], {
       cwd: subDir,
     });
 
@@ -637,7 +634,7 @@ test.concurrent("check reports orphaned paths with agent prompt", () =>
     // Create a subdirectory structure in target and add a file
     const subDir = join(ctx.targetDir, "packages/foo");
     await mkdir(subDir, { recursive: true });
-    await execa(clankBin, ["add", "notes.md", "--config", ctx.configPath], {
+    await clankExec(["add", "notes.md", "--config", ctx.configPath], {
       cwd: subDir,
     });
 

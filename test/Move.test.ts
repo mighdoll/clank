@@ -1,10 +1,7 @@
 import { lstat, mkdir, readlink, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { execa } from "execa";
+import { join } from "node:path";
 import { expect, test } from "vitest";
-import { clank, type TestContext, withTestEnv } from "./Helpers.ts";
-
-const clankBin = resolve("./bin/clank.ts");
+import { clank, clankExec, type TestContext, withTestEnv } from "./Helpers.ts";
 
 /** Get path in overlay for current project */
 function projectOverlay(ctx: TestContext, ...segments: string[]) {
@@ -17,7 +14,7 @@ function globalOverlay(ctx: TestContext, ...segments: string[]) {
 }
 
 async function initAndLink(ctx: TestContext): Promise<void> {
-  await execa(clankBin, ["init", ctx.overlayDir, "--config", ctx.configPath]);
+  await clankExec(["init", ctx.overlayDir, "--config", ctx.configPath]);
   await clank(ctx, "link");
 }
 
@@ -71,12 +68,9 @@ test.concurrent("mv renames prompt file and updates all agent symlinks", () =>
     expect((await lstat(geminiOld)).isSymbolicLink()).toBe(true);
 
     // Rename the prompt (from .claude/prompts directory)
-    await execa(
-      clankBin,
+    await clankExec(
       ["mv", "old-prompt.md", "new-prompt.md", "--config", ctx.configPath],
-      {
-        cwd: promptDir,
-      },
+      { cwd: promptDir },
     );
 
     // Old symlinks should be gone
