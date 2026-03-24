@@ -92,11 +92,14 @@ ${commands.join("\n")}`);
   }
 
   if (classified.untracked.length > 0) {
-    const commands = classified.untracked.map((p) => `  clank add ${rel(p)}`);
+    const files = classified.untracked.map((p) => `  ${rel(p)}`);
     sections.push(`Found untracked agent files.
 
 Add them to clank:
-${commands.join("\n")}`);
+${files.join("\n")}
+
+  clank add -i                  # add interactively
+  clank add <file> [<file>...]  # add specific files`);
   }
 
   if (classified.staleSymlinks.length > 0) {
