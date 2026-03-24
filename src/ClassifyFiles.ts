@@ -1,6 +1,7 @@
 import { lstat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { agentFiles } from "./AgentFiles.ts";
+import { isGeneratedByClank } from "./Consolidate.ts";
 import {
   isTrackedByGit,
   relativePath,
@@ -154,6 +155,7 @@ async function classifySingleAgentFile(
     return classifyAgentSymlink(filePath, overlayRoot, mapperCtx);
   }
   if (stat.isFile()) {
+    if (await isGeneratedByClank(filePath)) return {};
     const isTracked = await isTrackedByGit(filePath, targetRoot);
     return isTracked ? { tracked: [filePath] } : { untracked: [filePath] };
   }

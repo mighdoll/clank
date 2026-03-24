@@ -12,6 +12,7 @@ import {
   loadConfig,
   validateOverlayExists,
 } from "../Config.ts";
+import { consolidateRulesIntoAgentFiles } from "../Consolidate.ts";
 import { addGitExcludes } from "../Exclude.ts";
 import {
   createSymlink,
@@ -75,21 +76,7 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   const overlayRoot = expandPath(config.overlayRepo);
   await validateOverlayExists(overlayRoot);
 
-  // Clean up symlinks pointing to wrong worktree before linking
-  const staleRemoved = await cleanStaleWorktreeSymlinks(
-    targetRoot,
-    overlayRoot,
-    gitContext,
-  );
-  if (staleRemoved.length > 0) {
-    console.log(`\nCleaned ${staleRemoved.length} stale worktree symlink(s):`);
-    for (const path of staleRemoved) {
-      console.log(`  ${path}`);
-    }
-  }
-
-  // Check for problematic agent files before proceeding
-  await checkAgentFiles(targetRoot, overlayRoot);
+  await cleanStaleAndCheck(targetRoot, overlayRoot, gitContext);
 
   await ensureDir(join(overlayRoot, "targets", gitContext.projectName));
   await maybeInitWorktree(overlayRoot, gitContext);
@@ -103,6 +90,8 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   logLinkedPaths(linkedPaths);
   await createAgentLinks(agentsMappings, targetRoot, config.agents);
   await createPromptLinks(promptsMappings, targetRoot);
+
+  await maybeConsolidateRules(overlayRoot, targetRoot, gitContext, config);
 
   await setupProjectSettings(overlayRoot, gitContext, targetRoot);
   await addGitExcludes(targetRoot);
@@ -121,15 +110,48 @@ function logGitContext(ctx: GitContext): void {
   console.log(`Branch: ${ctx.worktreeName}${suffix}`);
 }
 
-/** Check for problematic agent files and error if found */
-async function checkAgentFiles(
+/** Clean stale worktree symlinks and check for problematic agent files */
+async function cleanStaleAndCheck(
   targetRoot: string,
   overlayRoot: string,
+  gitContext: GitContext,
 ): Promise<void> {
-  const classification = await classifyAgentFiles(targetRoot, overlayRoot);
+  const staleRemoved = await cleanStaleWorktreeSymlinks(
+    targetRoot,
+    overlayRoot,
+    gitContext,
+  );
+  if (staleRemoved.length > 0) {
+    console.log(`\nCleaned ${staleRemoved.length} stale worktree symlink(s):`);
+    for (const path of staleRemoved) {
+      console.log(`  ${path}`);
+    }
+  }
 
+  const classification = await classifyAgentFiles(targetRoot, overlayRoot);
   if (agentFileProblems(classification)) {
     throw new Error(formatAgentFileProblems(classification, await getCwd()));
+  }
+}
+
+/** Consolidate rules into generated AGENTS.md/GEMINI.md if rules exist */
+async function maybeConsolidateRules(
+  overlayRoot: string,
+  targetRoot: string,
+  gitContext: GitContext,
+  config: ClankConfig,
+): Promise<void> {
+  const consolidated = await consolidateRulesIntoAgentFiles({
+    overlayRoot,
+    targetRoot,
+    gitContext,
+    agents: config.agents,
+  });
+  if (consolidated.length > 0) {
+    console.log(`\nGenerated consolidated agent files:`);
+    for (const name of consolidated) {
+      console.log(`  ${name}`);
+    }
   }
 }
 

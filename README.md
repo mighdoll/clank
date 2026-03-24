@@ -24,6 +24,7 @@ Clank stores your AI agent files (CLAUDE.md, commands, notes) in a separate git 
 - **Multi-Agent Support**: Single source file, multiple symlinks (AGENTS.md, CLAUDE.md, GEMINI.md).
 - **Worktree-Aware**: Works seamlessly with git worktrees.
 - **Git Ignored**: Agent files are ignored in the main repo, tracked in the overlay repo.
+- **Rules Consolidation**: Use `.claude/rules/` for modular instructions; clank auto-generates AGENTS.md/GEMINI.md with consolidated content for cross-agent compatibility.
 - **Three Scopes**: Global (all projects), Project (all branches), Worktree (this branch only).
 
 ## Installation
@@ -300,6 +301,12 @@ Available placeholders:
 - `{{project_name}}` - Project name from git
 - `{{branch_name}}` - Current branch/worktree name
 
+## Rules Consolidation
+
+If you use Claude Code's `.claude/rules/` for modular instructions, clank automatically generates AGENTS.md and GEMINI.md by consolidating `agents.md` with all your rules. Claude reads rules natively via symlinks; other agents get everything in one file.
+
+Store rules in `claude/rules/` in your overlay, then run `clank link`. Consolidation activates automatically when rules files exist -- when there are no rules, all agent files remain symlinks as before.
+
 ## Design Principles
 
 1. **Everything is linked, nothing is copied** - Single source of truth in overlay
@@ -336,7 +343,8 @@ Available placeholders:
         ├── claude/           # Claude Code specific
         │   ├── settings.json # -> .claude/settings.json
         │   ├── commands/     # -> .claude/commands/
-        │   └── agents/       # -> .claude/agents/
+        │   ├── agents/       # -> .claude/agents/
+        │   └── rules/        # -> .claude/rules/ (also consolidated into AGENTS.md/GEMINI.md)
         ├── gemini/           # Gemini specific
         │   └── commands/     # -> .gemini/commands/
         └── worktrees/

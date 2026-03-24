@@ -1,4 +1,5 @@
 import { expandPath, loadConfig } from "../Config.ts";
+import { removeGeneratedAgentFiles } from "../Consolidate.ts";
 import { removeGitExcludes } from "../Exclude.ts";
 import { fileExists, getCwd, removeSymlink, walkDirectory } from "../FsUtil.ts";
 import { getGitContext } from "../Git.ts";
@@ -33,6 +34,10 @@ export async function unlinkCommand(targetDir?: string): Promise<void> {
       removedCount++;
     }
   }
+
+  // Remove generated agent files (from rules consolidation)
+  const generatedRemoved = await removeGeneratedAgentFiles(targetRoot);
+  removedCount += generatedRemoved.length;
 
   await removeGitExcludes(targetRoot);
   await removeVscodeSettings(targetRoot);
