@@ -195,18 +195,6 @@ export function normalizeAddPath(
   return join(normalizedCwd, "clank", filename);
 }
 
-/** Check if path starts with a managed agent dir (.claude/, .gemini/) */
-function startsWithAgentDir(path: string): boolean {
-  return managedAgentDirs.some((dir) => path.startsWith(`${dir}/`));
-}
-
-/** Check if path is inside a managed agent dir (.claude/, .gemini/) */
-function isInsideAgentDir(relPath: string): boolean {
-  return managedAgentDirs.some(
-    (dir) => relPath.startsWith(`${dir}/`) || relPath === dir,
-  );
-}
-
 /** Check if a relative path contains a clank/ directory component */
 export function isClankPath(relPath: string): boolean {
   return relPath.startsWith("clank/") || relPath.includes("/clank/");
@@ -324,6 +312,18 @@ function encodeTargetPath(relPath: string, overlayBase: string): string {
   }
   // Plain files → add clank/ prefix
   return join(overlayBase, "clank", relPath);
+}
+
+/** Check if path starts with a managed agent dir (.claude/, .gemini/) */
+function startsWithAgentDir(path: string): boolean {
+  return managedAgentDirs.some((dir) => path.startsWith(`${dir}/`));
+}
+
+/** Check if path is inside a managed agent dir (.claude/, .gemini/) */
+function isInsideAgentDir(relPath: string): boolean {
+  return managedAgentDirs.some(
+    (dir) => relPath.startsWith(`${dir}/`) || relPath === dir,
+  );
 }
 
 /** Decode an overlay-relative path to target (shared by all scopes) */

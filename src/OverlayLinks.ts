@@ -133,15 +133,6 @@ export async function createPromptLinks(
   return created;
 }
 
-/** Check if two paths are equivalent prompt files in different agent directories */
-function isMatchingPromptPath(
-  canonicalPath: string,
-  actualPath: string,
-): boolean {
-  const canonical = getPromptRelPath(canonicalPath);
-  return canonical !== null && canonical === getPromptRelPath(actualPath);
-}
-
 /** Find and remove symlinks pointing to wrong worktree in the overlay.
  *  Returns paths that were removed. */
 export async function cleanStaleWorktreeSymlinks(
@@ -175,6 +166,15 @@ export async function cleanStaleWorktreeSymlinks(
   }
 
   return removed;
+}
+
+/** Check if two paths are equivalent prompt files in different agent directories */
+function isMatchingPromptPath(
+  canonicalPath: string,
+  actualPath: string,
+): boolean {
+  const canonical = getPromptRelPath(canonicalPath);
+  return canonical !== null && canonical === getPromptRelPath(actualPath);
 }
 
 /** Check if a path is inside a clank-managed directory */

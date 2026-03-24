@@ -145,6 +145,23 @@ export function deduplicateGlobs(globs: string[]): string[] {
   return [...universal, ...uncovered];
 }
 
+/** Load a repo's .gitignore and return a matcher for ignored filenames */
+export async function loadGitignore(
+  repoRoot: string,
+): Promise<(name: string) => boolean> {
+  const gitignorePath = join(repoRoot, ".gitignore");
+  if (!(await fileExists(gitignorePath))) return () => false;
+
+  const content = await readFile(gitignorePath, "utf-8");
+  const patterns = content
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#") && !line.startsWith("!"));
+
+  if (patterns.length === 0) return () => false;
+  return picomatch(patterns);
+}
+
 /** Parse a gitignore file and accumulate results */
 async function parseGitignoreFile(
   source: string,
@@ -196,23 +213,6 @@ function parseGitignoreContent(
   }
 
   return { patterns, negationWarnings };
-}
-
-/** Load a repo's .gitignore and return a matcher for ignored filenames */
-export async function loadGitignore(
-  repoRoot: string,
-): Promise<(name: string) => boolean> {
-  const gitignorePath = join(repoRoot, ".gitignore");
-  if (!(await fileExists(gitignorePath))) return () => false;
-
-  const content = await readFile(gitignorePath, "utf-8");
-  const patterns = content
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("#") && !line.startsWith("!"));
-
-  if (patterns.length === 0) return () => false;
-  return picomatch(patterns);
 }
 
 /** Parse a single gitignore line */
