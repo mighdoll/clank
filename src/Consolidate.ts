@@ -146,7 +146,10 @@ async function collectRulesFiles(
 ): Promise<RuleFile[]> {
   const dirs = [
     join(overlayRoot, "global/claude/rules"),
-    join(overlayProjectDir(overlayRoot, gitContext.projectName), "claude/rules"),
+    join(
+      overlayProjectDir(overlayRoot, gitContext.projectName),
+      "claude/rules",
+    ),
     join(overlayWorktreeDir(overlayRoot, gitContext), "claude/rules"),
   ];
 
