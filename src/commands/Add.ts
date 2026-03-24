@@ -8,6 +8,7 @@ import {
 import { basename, dirname, join, relative } from "node:path";
 import * as readline from "node:readline";
 import { forEachAgentPath } from "../AgentFiles.ts";
+import { classifyAgentFiles } from "../ClassifyFiles.ts";
 import { expandPath, loadConfig, validateOverlayExists } from "../Config.ts";
 import {
   createSymlink,
@@ -145,19 +146,34 @@ async function addAllInteractive(ctx: AddContext): Promise<void> {
   const unadded = await findUnaddedFiles(context);
   const regularFiles = unadded.filter((f) => f.kind === "unadded");
 
-  if (regularFiles.length === 0) {
+  // Also find untracked agent files outside managed dirs (e.g. packages/foo/CLAUDE.md)
+  const agentClassification = await classifyAgentFiles(
+    gitContext.gitRoot,
+    overlayRoot,
+    gitContext,
+  );
+  const regularPaths = new Set(regularFiles.map((f) => f.targetPath));
+  const extraAgentPaths = agentClassification.untracked.filter(
+    (p) => !regularPaths.has(p),
+  );
+
+  const allPaths = [
+    ...regularFiles.map((f) => f.targetPath),
+    ...extraAgentPaths,
+  ];
+
+  if (allPaths.length === 0) {
     console.log("No unadded files found.");
     return;
   }
 
-  console.log(`Found ${regularFiles.length} unadded file(s):\n`);
+  console.log(`Found ${allPaths.length} unadded file(s):\n`);
 
   const counts: ScopeCounts = { project: 0, worktree: 0, global: 0, skip: 0 };
 
-  for (let i = 0; i < regularFiles.length; i++) {
-    const file = regularFiles[i];
-    const relPath = relative(cwd, file.targetPath);
-    const result = await promptAndAddFile(relPath, i, regularFiles.length, ctx);
+  for (let i = 0; i < allPaths.length; i++) {
+    const relPath = relative(cwd, allPaths[i]);
+    const result = await promptAndAddFile(relPath, i, allPaths.length, ctx);
     if (result === "quit") break;
     if (result !== "error") counts[result]++;
   }

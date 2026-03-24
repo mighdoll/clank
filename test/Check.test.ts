@@ -1,6 +1,7 @@
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { classifyAgentFiles } from "../src/ClassifyFiles.ts";
 import { findUnaddedFiles } from "../src/commands/Check.ts";
 import type { MapperContext } from "../src/Mapper.ts";
 import {
@@ -225,4 +226,21 @@ test("findUnaddedFiles detects symlinks pointing to wrong overlay location", asy
     kind: "wrong-mapping",
     currentTarget: wrongOverlayFile,
   });
+});
+
+test("classifyAgentFiles finds untracked agent files outside managed dirs", async () => {
+  // Create CLAUDE.md in a nested package directory (not in clank/, .claude/, .gemini/)
+  const pkgDir = join(ctx.targetDir, "packages/my-pkg");
+  await mkdir(pkgDir, { recursive: true });
+  await writeFile(join(pkgDir, "CLAUDE.md"), "# Instructions");
+
+  const mapperCtx = createMapperContext(ctx);
+  const result = await classifyAgentFiles(
+    ctx.targetDir,
+    ctx.overlayDir,
+    mapperCtx.gitContext,
+  );
+  expect(result.untracked).toContain(
+    join(ctx.targetDir, "packages/my-pkg/CLAUDE.md"),
+  );
 });
