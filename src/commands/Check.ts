@@ -289,7 +289,7 @@ function showUnaddedFiles(
       console.log(`  ${relativePath(cwd, file.targetPath)}`);
     }
     console.log();
-    console.log("  clank add -i                  # add interactively");
+    console.log("  clank add                     # add interactively");
     console.log("  clank add <file> [<file>...]  # add specific files");
     console.log();
   }

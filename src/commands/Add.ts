@@ -48,7 +48,6 @@ interface AddContext {
   overlayRoot: string;
 }
 
-/** Create agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md → agents.md) */
 interface AgentLinkParams {
   overlayPath: string;
   symlinkDir: string;
@@ -72,6 +71,17 @@ type ScopeCounts = {
   skip: number;
 };
 
+interface CreateSymlinksParams {
+  filePath: string;
+  normalizedPath: string;
+  overlayPath: string;
+  config: { agents: string[] };
+  gitRoot: string;
+  overlayRoot: string;
+  cwd: string;
+  quiet?: boolean;
+}
+
 const scopeLabels: Record<Scope, string> = {
   global: "global",
   project: "project",
@@ -92,15 +102,9 @@ export async function addCommand(
 
   const ctx = { cwd, gitContext, config, overlayRoot };
 
-  if (options.interactive) {
+  if (options.interactive || filePaths.length === 0) {
     await addAllInteractive(ctx);
     return;
-  }
-
-  if (filePaths.length === 0) {
-    throw new Error(
-      "No files specified. Use --interactive for interactive mode.",
-    );
   }
 
   for (const filePath of filePaths) {
@@ -137,18 +141,15 @@ async function validateAddOptions(
 /** Interactive mode: add all unadded files with per-file scope selection */
 async function addAllInteractive(ctx: AddContext): Promise<void> {
   const { cwd, gitContext, overlayRoot } = ctx;
-  const context: MapperContext = {
-    overlayRoot,
-    targetRoot: gitContext.gitRoot,
-    gitContext,
-  };
+  const { gitRoot: targetRoot } = gitContext;
+  const context: MapperContext = { overlayRoot, targetRoot, gitContext };
 
   const unadded = await findUnaddedFiles(context);
   const regularFiles = unadded.filter((f) => f.kind === "unadded");
 
   // Also find untracked agent files outside managed dirs (e.g. packages/foo/CLAUDE.md)
   const agentClassification = await classifyAgentFiles(
-    gitContext.gitRoot,
+    targetRoot,
     overlayRoot,
     gitContext,
   );
@@ -200,7 +201,6 @@ async function addSingleFile(
   const { quiet } = options;
 
   const scope = resolveScopeFromOptions(options);
-  /** Absolute path where symlink will be created in target repo */
   const normalizedPath = normalizeAddPath(filePath, cwd, gitRoot);
   const context: MapperContext = {
     overlayRoot,
@@ -216,7 +216,6 @@ async function addSingleFile(
   // Only check barePath for symlink - we want the user's input file, not clank/foo.md
   const barePath = join(cwd, filePath);
 
-  // Check if already in overlay at a different scope
   await checkScopeConflict(barePath, scope, context, cwd);
 
   if (await fileExists(overlayPath)) {
@@ -244,53 +243,6 @@ async function addSingleFile(
     cwd,
     quiet,
   });
-}
-
-interface CreateSymlinksParams {
-  filePath: string;
-  normalizedPath: string;
-  overlayPath: string;
-  config: { agents: string[] };
-  gitRoot: string;
-  overlayRoot: string;
-  cwd: string;
-  quiet?: boolean;
-}
-
-/** Create symlinks based on file type (agent, prompt, or regular) */
-async function createSymlinksForFile(params: CreateSymlinksParams) {
-  const {
-    filePath,
-    normalizedPath,
-    overlayPath,
-    config,
-    gitRoot,
-    overlayRoot,
-    cwd,
-    quiet,
-  } = params;
-
-  if (isAgentFile(filePath)) {
-    const symlinkDir = dirname(normalizedPath);
-    await createAgentLinks({
-      overlayPath,
-      symlinkDir,
-      gitRoot,
-      overlayRoot,
-      agents: config.agents,
-      quiet,
-    });
-  } else if (isPromptFile(normalizedPath)) {
-    await handlePromptFile(normalizedPath, overlayPath, gitRoot, cwd, quiet);
-  } else {
-    await handleRegularFile(
-      normalizedPath,
-      overlayPath,
-      overlayRoot,
-      cwd,
-      quiet,
-    );
-  }
 }
 
 /** Prompt for scope and add a single file. Returns the choice or "error". */
@@ -332,7 +284,7 @@ async function promptAndAddFile(
 }
 
 /** Print summary of interactive add results */
-function printSummary(counts: Record<string, number>): void {
+function printSummary(counts: ScopeCounts): void {
   const parts: string[] = [];
   if (counts.project > 0) parts.push(`${counts.project} to project`);
   if (counts.worktree > 0) parts.push(`${counts.worktree} to worktree`);
@@ -398,72 +350,31 @@ async function addFileToOverlay(
   }
 }
 
-async function createAgentLinks(p: AgentLinkParams): Promise<void> {
-  const { overlayPath, quiet, ...classifyParams } = p;
-  const { toCreate, existing, skipped } =
-    await classifyAgentLinks(classifyParams);
+/** Create symlinks based on file type (agent, prompt, or regular) */
+async function createSymlinksForFile(params: CreateSymlinksParams) {
+  const { filePath, normalizedPath, overlayPath, config } = params;
+  const { gitRoot, overlayRoot, cwd, quiet } = params;
 
-  const promisedLinks = toCreate.map(({ targetPath }) => {
-    const linkTarget = getLinkTarget(targetPath, overlayPath);
-    return createSymlink(linkTarget, targetPath);
-  });
-  await Promise.all(promisedLinks);
-
-  if (!quiet) {
-    if (toCreate.length) {
-      const created = toCreate.map(({ name }) => name);
-      console.log(`Created symlinks: ${created.join(", ")}`);
-    }
-
-    if (existing.length) {
-      console.log(`Symlinks already exist: ${existing.join(", ")}`);
-    }
-
-    if (skipped.length) {
-      console.log(`Skipped (already tracked in git): ${skipped.join(", ")}`);
-    }
-  }
-}
-
-/** Handle prompt file symlink creation */
-async function handlePromptFile(
-  normalizedPath: string,
-  overlayPath: string,
-  gitRoot: string,
-  cwd: string,
-  quiet?: boolean,
-): Promise<void> {
-  const promptRelPath = getPromptRelPath(normalizedPath);
-  if (promptRelPath) {
-    const created = await createPromptLinks(
+  if (isAgentFile(filePath)) {
+    const symlinkDir = dirname(normalizedPath);
+    await createAgentLinks({
       overlayPath,
-      promptRelPath,
+      symlinkDir,
       gitRoot,
-    );
-    if (!quiet && created.length) {
-      console.log(
-        `Created symlinks: ${created.map((p) => relative(cwd, p)).join(", ")}`,
-      );
-    }
-  }
-}
-
-/** Handle regular file symlink creation */
-async function handleRegularFile(
-  normalizedPath: string,
-  overlayPath: string,
-  overlayRoot: string,
-  cwd: string,
-  quiet?: boolean,
-): Promise<void> {
-  if (await isSymlinkToOverlay(normalizedPath, overlayRoot)) {
-    if (!quiet)
-      console.log(`Symlink already exists: ${relative(cwd, normalizedPath)}`);
+      overlayRoot,
+      agents: config.agents,
+      quiet,
+    });
+  } else if (isPromptFile(normalizedPath)) {
+    await handlePromptFile(normalizedPath, overlayPath, gitRoot, cwd, quiet);
   } else {
-    const linkTarget = getLinkTarget(normalizedPath, overlayPath);
-    await createSymlink(linkTarget, normalizedPath);
-    if (!quiet)
-      console.log(`Created symlink: ${relative(cwd, normalizedPath)}`);
+    await handleRegularFile(
+      normalizedPath,
+      overlayPath,
+      overlayRoot,
+      cwd,
+      quiet,
+    );
   }
 }
 
@@ -520,30 +431,72 @@ async function findSourceContent(
   return "";
 }
 
-/** Classify which agent symlinks to create vs skip */
-async function classifyAgentLinks(
-  p: Omit<AgentLinkParams, "overlayPath">,
-): Promise<AgentLinkClassification> {
-  const { symlinkDir, gitRoot, overlayRoot, agents } = p;
-  const skipped: string[] = [];
-  const existing: string[] = [];
-  const toCreate: { targetPath: string; name: string }[] = [];
+async function createAgentLinks(p: AgentLinkParams): Promise<void> {
+  const { overlayPath, quiet, ...classifyParams } = p;
+  const { toCreate, existing, skipped } =
+    await classifyAgentLinks(classifyParams);
 
-  await forEachAgentPath(symlinkDir, agents, async (targetPath) => {
-    // Check if symlink already points to overlay
-    if (await isSymlinkToOverlay(targetPath, overlayRoot)) {
-      existing.push(basename(targetPath));
-      return;
-    }
-
-    if (await isTrackedRealFile(targetPath, gitRoot)) {
-      skipped.push(basename(targetPath));
-    } else {
-      toCreate.push({ targetPath, name: basename(targetPath) });
-    }
+  const promisedLinks = toCreate.map(({ targetPath }) => {
+    const linkTarget = getLinkTarget(targetPath, overlayPath);
+    return createSymlink(linkTarget, targetPath);
   });
+  await Promise.all(promisedLinks);
 
-  return { toCreate, existing, skipped };
+  if (!quiet) {
+    if (toCreate.length) {
+      const created = toCreate.map(({ name }) => name);
+      console.log(`Created symlinks: ${created.join(", ")}`);
+    }
+
+    if (existing.length) {
+      console.log(`Symlinks already exist: ${existing.join(", ")}`);
+    }
+
+    if (skipped.length) {
+      console.log(`Skipped (already tracked in git): ${skipped.join(", ")}`);
+    }
+  }
+}
+
+/** Handle prompt file symlink creation */
+async function handlePromptFile(
+  normalizedPath: string,
+  overlayPath: string,
+  gitRoot: string,
+  cwd: string,
+  quiet?: boolean,
+): Promise<void> {
+  const promptRelPath = getPromptRelPath(normalizedPath);
+  if (promptRelPath) {
+    const created = await createPromptLinks(
+      overlayPath,
+      promptRelPath,
+      gitRoot,
+    );
+    if (!quiet && created.length) {
+      const names = created.map((p) => relative(cwd, p)).join(", ");
+      console.log(`Created symlinks: ${names}`);
+    }
+  }
+}
+
+/** Handle regular file symlink creation */
+async function handleRegularFile(
+  normalizedPath: string,
+  overlayPath: string,
+  overlayRoot: string,
+  cwd: string,
+  quiet?: boolean,
+): Promise<void> {
+  if (await isSymlinkToOverlay(normalizedPath, overlayRoot)) {
+    if (!quiet)
+      console.log(`Symlink already exists: ${relative(cwd, normalizedPath)}`);
+  } else {
+    const linkTarget = getLinkTarget(normalizedPath, overlayPath);
+    await createSymlink(linkTarget, normalizedPath);
+    if (!quiet)
+      console.log(`Created symlink: ${relative(cwd, normalizedPath)}`);
+  }
 }
 
 /** Read a single keypress from stdin (raw mode) */
@@ -567,4 +520,29 @@ function readSingleKey(): Promise<string> {
 
     process.stdin.once("data", onKeypress);
   });
+}
+
+/** Classify which agent symlinks to create vs skip */
+async function classifyAgentLinks(
+  p: Omit<AgentLinkParams, "overlayPath">,
+): Promise<AgentLinkClassification> {
+  const { symlinkDir, gitRoot, overlayRoot, agents } = p;
+  const skipped: string[] = [];
+  const existing: string[] = [];
+  const toCreate: { targetPath: string; name: string }[] = [];
+
+  await forEachAgentPath(symlinkDir, agents, async (targetPath) => {
+    if (await isSymlinkToOverlay(targetPath, overlayRoot)) {
+      existing.push(basename(targetPath));
+      return;
+    }
+
+    if (await isTrackedRealFile(targetPath, gitRoot)) {
+      skipped.push(basename(targetPath));
+    } else {
+      toCreate.push({ targetPath, name: basename(targetPath) });
+    }
+  });
+
+  return { toCreate, existing, skipped };
 }
