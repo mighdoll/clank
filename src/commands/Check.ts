@@ -35,6 +35,10 @@ export type UnaddedFile = ManagedFileState & {
   relativePath: string;
 };
 
+export interface CheckOptions {
+  prompt?: boolean;
+}
+
 /** Files that should remain local and not be tracked by clank */
 const localOnlyFiles = ["settings.local.json"];
 
@@ -42,7 +46,7 @@ const localOnlyFiles = ["settings.local.json"];
 const compactThreshold = 5;
 
 /** Check for orphaned overlay paths that don't match target structure */
-export async function checkCommand(): Promise<void> {
+export async function checkCommand(options: CheckOptions = {}): Promise<void> {
   const cwd = await getCwd();
   const gitContext = await getGitContext(cwd);
   const config = await loadConfig();
@@ -53,7 +57,7 @@ export async function checkCommand(): Promise<void> {
 
   await showOverlayStatus(overlayRoot, ignorePatterns);
 
-  const problems = await checkAllProblems(ctx, cwd, ignorePatterns);
+  const problems = await checkAllProblems(ctx, cwd, ignorePatterns, options);
   if (!problems) {
     console.log("No issues found. Overlay matches target structure.");
   }
@@ -170,6 +174,7 @@ async function checkAllProblems(
   ctx: MapperContext,
   cwd: string,
   ignorePatterns: string[] = [],
+  options: CheckOptions = {},
 ): Promise<boolean> {
   const { overlayRoot, targetRoot, gitContext } = ctx;
   let hasProblems = false;
@@ -199,7 +204,7 @@ async function checkAllProblems(
   );
   if (orphans.length > 0) {
     hasProblems = true;
-    showOrphanedPaths(orphans, targetRoot, overlayRoot);
+    showOrphanedPaths(orphans, targetRoot, overlayRoot, options);
   }
 
   return hasProblems;
@@ -273,12 +278,26 @@ function showOrphanedPaths(
   orphans: OrphanedPath[],
   targetRoot: string,
   overlayRoot: string,
+  options: CheckOptions = {},
 ): void {
-  console.log(`Found ${orphans.length} orphaned overlay path(s):\n`);
-  for (const orphan of orphans) {
-    console.log(`  ${orphan.fileName} (${orphan.scope})`);
-    console.log(`    Overlay: ${orphan.overlayPath}`);
-    console.log(`    Expected dir: ${orphan.expectedTargetDir}\n`);
+  const compact = orphans.length >= compactThreshold;
+
+  if (compact) {
+    const names = orphans.map((o) => `${o.expectedTargetDir}/${o.fileName}`);
+    console.log(`Found ${orphans.length} orphaned overlay path(s):`);
+    console.log(`  ${formatInlineList(names)}\n`);
+  } else {
+    console.log(`Found ${orphans.length} orphaned overlay path(s):\n`);
+    for (const orphan of orphans) {
+      console.log(`  ${orphan.fileName} (${orphan.scope})`);
+      console.log(`    Overlay: ${orphan.overlayPath}`);
+      console.log(`    Expected dir: ${orphan.expectedTargetDir}\n`);
+    }
+  }
+
+  if (compact && !options.prompt) {
+    console.log("Run `clank status --prompt` for an agent fix prompt.");
+    return;
   }
 
   console.log("Target project:", targetRoot);

@@ -134,27 +134,6 @@ async function cleanStaleAndCheck(
   }
 }
 
-/** Consolidate rules into generated AGENTS.md/GEMINI.md if rules exist */
-async function maybeConsolidateRules(
-  overlayRoot: string,
-  targetRoot: string,
-  gitContext: GitContext,
-  config: ClankConfig,
-): Promise<void> {
-  const consolidated = await consolidateRulesIntoAgentFiles({
-    overlayRoot,
-    targetRoot,
-    gitContext,
-    agents: config.agents,
-  });
-  if (consolidated.length > 0) {
-    console.log(`\nGenerated consolidated agent files:`);
-    for (const name of consolidated) {
-      console.log(`  ${name}`);
-    }
-  }
-}
-
 async function maybeInitWorktree(
   overlayRoot: string,
   gitContext: GitContext,
@@ -274,6 +253,27 @@ async function createPromptLinks(
     console.log(`\nCreated prompt symlinks:`);
     for (const path of created) {
       console.log(`  ${path}`);
+    }
+  }
+}
+
+/** Consolidate rules into generated AGENTS.md/GEMINI.md if rules exist */
+async function maybeConsolidateRules(
+  overlayRoot: string,
+  targetRoot: string,
+  gitContext: GitContext,
+  config: ClankConfig,
+): Promise<void> {
+  const consolidated = await consolidateRulesIntoAgentFiles({
+    overlayRoot,
+    targetRoot,
+    gitContext,
+    agents: config.agents,
+  });
+  if (consolidated.length > 0) {
+    console.log(`\nGenerated consolidated agent files:`);
+    for (const name of consolidated) {
+      console.log(`  ${name}`);
     }
   }
 }

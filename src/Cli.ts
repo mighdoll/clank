@@ -84,31 +84,9 @@ export async function runCLI(): Promise<void> {
 }
 
 function registerCommands(program: Command): void {
-  registerCoreCommands(program);
-  registerHelpCommands(program);
-}
-
-function registerCoreCommands(program: Command): void {
   registerOverlayCommands(program);
   registerUtilityCommands(program);
-}
-
-function registerHelpCommands(program: Command): void {
-  const help = program
-    .command("help")
-    .description("Show help information")
-    .argument("[command]", "Command to show help for")
-    .action((commandName?: string) => {
-      if (!commandName) return program.help();
-      const subcommand = program.commands.find((c) => c.name() === commandName);
-      if (subcommand) return subcommand.help();
-      console.error(`Unknown command: ${commandName}`);
-      process.exit(1);
-    });
-  help
-    .command("structure")
-    .description("Show overlay directory structure")
-    .action(() => console.log(structureHelp));
+  registerHelpCommands(program);
 }
 
 function registerOverlayCommands(program: Command): void {
@@ -163,6 +141,7 @@ function registerUtilityCommands(program: Command): void {
     .command("check")
     .alias("status")
     .description("Show overlay status and check for issues")
+    .option("--prompt", "Print the agent fix prompt for orphaned paths")
     .action(withErrorHandling(checkCommand));
 
   registerFilesCommand(program);
@@ -173,6 +152,24 @@ function registerUtilityCommands(program: Command): void {
     .option("--remove", "Remove clank-generated VS Code settings")
     .option("--force", "Generate even if settings.json is tracked by git")
     .action(withErrorHandling(vscodeCommand));
+}
+
+function registerHelpCommands(program: Command): void {
+  const help = program
+    .command("help")
+    .description("Show help information")
+    .argument("[command]", "Command to show help for")
+    .action((commandName?: string) => {
+      if (!commandName) return program.help();
+      const subcommand = program.commands.find((c) => c.name() === commandName);
+      if (subcommand) return subcommand.help();
+      console.error(`Unknown command: ${commandName}`);
+      process.exit(1);
+    });
+  help
+    .command("structure")
+    .description("Show overlay directory structure")
+    .action(() => console.log(structureHelp));
 }
 
 function withErrorHandling<T extends unknown[]>(
