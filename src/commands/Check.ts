@@ -38,6 +38,9 @@ export type UnaddedFile = ManagedFileState & {
 /** Files that should remain local and not be tracked by clank */
 const localOnlyFiles = ["settings.local.json"];
 
+/** Switch to a one-line summary when a category has at least this many files */
+const compactThreshold = 5;
+
 /** Check for orphaned overlay paths that don't match target structure */
 export async function checkCommand(): Promise<void> {
   const cwd = await getCwd();
@@ -98,13 +101,8 @@ export async function findOrphans(
   const isIgnored =
     ignorePatterns.length > 0 ? picomatch(ignorePatterns) : null;
 
-  const skip = (relPath: string): boolean => {
-    if (isIgnored) {
-      const pathBasename = basename(relPath);
-      if (isIgnored(relPath) || isIgnored(pathBasename)) return true;
-    }
-    return false;
-  };
+  const skip = (relPath: string): boolean =>
+    !!isIgnored && (isIgnored(relPath) || isIgnored(basename(relPath)));
 
   for await (const { path, isDirectory } of walkDirectory(projectDir, {
     skipDirs: [".git", "node_modules", "worktrees"],
@@ -122,7 +120,6 @@ export async function findOrphans(
       continue;
     }
 
-    // This is a subdirectory file - check if target dir exists
     // e.g., tools/packages/wesl/clank/notes.md -> check tools/packages/wesl/
     const targetSubdir = extractTargetSubdir(relPath);
     if (!targetSubdir) continue;
@@ -227,12 +224,10 @@ function isLocalOnlyFile(relPath: string): boolean {
  * @example "tools/packages/wesl/agents.md" -> "tools/packages/wesl"
  */
 function extractTargetSubdir(relPath: string): string | null {
-  // Check for /clank/ or /claude/ in path
   for (const dir of managedDirs) {
     const idx = relPath.indexOf(`/${dir}/`);
     if (idx !== -1) return relPath.slice(0, idx);
   }
-  // Check for agents.md in a subdirectory
   if (relPath.endsWith("/agents.md")) {
     return relPath.slice(0, -"/agents.md".length);
   }
@@ -250,49 +245,27 @@ function showUnaddedFiles(
     ? `${projectName}/${worktreeName}`
     : projectName;
 
-  const outsideOverlay = unadded.filter((f) => f.kind === "outside-overlay");
-  const wrongMapping = unadded.filter((f) => f.kind === "wrong-mapping");
+  const outsideOverlay = unadded.filter(
+    (
+      f,
+    ): f is UnaddedFile & { kind: "outside-overlay"; currentTarget: string } =>
+      f.kind === "outside-overlay",
+  );
+  const wrongMapping = unadded.filter(
+    (
+      f,
+    ): f is UnaddedFile & {
+      kind: "wrong-mapping";
+      currentTarget: string;
+      expectedTarget: string;
+    } => f.kind === "wrong-mapping",
+  );
   const regularFiles = unadded.filter((f) => f.kind === "unadded");
 
-  if (outsideOverlay.length > 0) {
-    console.log(
-      `Found ${outsideOverlay.length} stale symlink(s) in ${targetName}:\n`,
-    );
-    console.log("These symlinks point outside the clank overlay.");
-    console.log("Remove them manually, then run `clank link` to recreate:\n");
-    for (const file of outsideOverlay) {
-      console.log(`  rm ${relativePath(cwd, file.targetPath)}`);
-    }
-    console.log();
-  }
-
-  if (wrongMapping.length > 0) {
-    console.log(
-      `Found ${wrongMapping.length} mislinked symlink(s) in ${targetName}:\n`,
-    );
-    console.log("These symlinks point to the wrong overlay location.");
-    console.log("Run `clank link` to fix them.\n");
-    for (const file of wrongMapping) {
-      console.log(`  ${relativePath(cwd, file.targetPath)}`);
-      if (file.currentTarget) {
-        console.log(`    points to: ${file.currentTarget}`);
-      }
-    }
-    console.log();
-  }
-
-  if (regularFiles.length > 0) {
-    console.log(
-      `Found ${regularFiles.length} unadded file(s) in ${targetName}:\n`,
-    );
-    for (const file of regularFiles) {
-      console.log(`  ${relativePath(cwd, file.targetPath)}`);
-    }
-    console.log();
-    console.log("  clank add                     # add interactively");
-    console.log("  clank add <file> [<file>...]  # add specific files");
-    console.log();
-  }
+  if (outsideOverlay.length > 0)
+    showOutsideOverlay(outsideOverlay, cwd, targetName);
+  if (wrongMapping.length > 0) showWrongMapping(wrongMapping, cwd, targetName);
+  if (regularFiles.length > 0) showUnadded(regularFiles, cwd, targetName);
 }
 
 /** Display orphaned paths and remediation prompt */
@@ -314,6 +287,85 @@ function showOrphanedPaths(
   console.log("─".repeat(50));
   console.log(generateAgentPrompt(orphans, targetRoot, overlayRoot));
   console.log("─".repeat(50));
+}
+
+function showOutsideOverlay(
+  items: (UnaddedFile & { currentTarget: string })[],
+  cwd: string,
+  targetName: string,
+): void {
+  console.log(`Found ${items.length} stale symlink(s) in ${targetName}:\n`);
+  console.log("These symlinks point outside the clank overlay.");
+  console.log("Remove them manually, then run `clank link` to recreate:\n");
+  for (const file of items) {
+    console.log(`  rm ${relativePath(cwd, file.targetPath)}`);
+  }
+  console.log();
+}
+
+function showWrongMapping(
+  items: (UnaddedFile & { currentTarget: string })[],
+  cwd: string,
+  targetName: string,
+): void {
+  if (items.length >= compactThreshold) {
+    const names = items.map((f) => relativePath(cwd, f.targetPath));
+    console.log(
+      `Found ${items.length} mislinked symlink(s) in ${targetName} — run \`clank link\` to fix:`,
+    );
+    console.log(`  ${formatInlineList(names)}\n`);
+    return;
+  }
+  console.log(`Found ${items.length} mislinked symlink(s) in ${targetName}:\n`);
+  console.log("These symlinks point to the wrong overlay location.");
+  console.log("Run `clank link` to fix them.\n");
+  for (const file of items) {
+    console.log(`  ${relativePath(cwd, file.targetPath)}`);
+    if (file.currentTarget) {
+      console.log(`    points to: ${file.currentTarget}`);
+    }
+  }
+  console.log();
+}
+
+function showUnadded(
+  items: UnaddedFile[],
+  cwd: string,
+  targetName: string,
+): void {
+  if (items.length >= compactThreshold) {
+    const names = items.map((f) => relativePath(cwd, f.targetPath));
+    console.log(
+      `Found ${items.length} unadded file(s) in ${targetName} — run \`clank add\` to add:`,
+    );
+    console.log(`  ${formatInlineList(names)}\n`);
+    return;
+  }
+  console.log(`Found ${items.length} unadded file(s) in ${targetName}:\n`);
+  for (const file of items) {
+    console.log(`  ${relativePath(cwd, file.targetPath)}`);
+  }
+  console.log();
+  console.log("  clank add                     # add interactively");
+  console.log("  clank add <file> [<file>...]  # add specific files");
+  console.log();
+}
+
+/** Join names with spaces up to maxChars, then append "(+N more)" if truncated */
+function formatInlineList(names: string[], maxChars = 80): string {
+  const parts: string[] = [];
+  let used = 0;
+  for (let i = 0; i < names.length; i++) {
+    const next = names[i];
+    const sep = parts.length === 0 ? 0 : 1;
+    if (parts.length > 0 && used + sep + next.length > maxChars) {
+      parts.push(`(+${names.length - i} more)`);
+      break;
+    }
+    parts.push(next);
+    used += sep + next.length;
+  }
+  return parts.join(" ");
 }
 
 /** Generate agent prompt for fixing orphaned paths */
