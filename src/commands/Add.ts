@@ -17,7 +17,7 @@ import {
   getCwd,
   getLinkTarget,
   isSymlink,
-  isTrackedByGit,
+  isTrackedRealFile,
   walkDirectory,
 } from "../FsUtil.ts";
 import { type GitContext, getGitContext } from "../Git.ts";
@@ -536,12 +536,7 @@ async function classifyAgentLinks(
       return;
     }
 
-    const isTrackedFile =
-      (await fileExists(targetPath)) &&
-      !(await isSymlink(targetPath)) &&
-      (await isTrackedByGit(targetPath, gitRoot));
-
-    if (isTrackedFile) {
+    if (await isTrackedRealFile(targetPath, gitRoot)) {
       skipped.push(basename(targetPath));
     } else {
       toCreate.push({ targetPath, name: basename(targetPath) });

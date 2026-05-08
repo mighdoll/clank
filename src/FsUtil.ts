@@ -178,6 +178,16 @@ export async function isSymlink(filePath: string): Promise<boolean> {
   }
 }
 
+/** Check if a path is a real (non-symlink) file tracked by git */
+export async function isTrackedRealFile(
+  filePath: string,
+  repoRoot: string,
+): Promise<boolean> {
+  if (!(await fileExists(filePath))) return false;
+  if (await isSymlink(filePath)) return false;
+  return isTrackedByGit(filePath, repoRoot);
+}
+
 /** Get path relative to cwd, or "." if same directory */
 export function relativePath(cwd: string, path: string): string {
   return relative(cwd, path) || ".";

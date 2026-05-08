@@ -21,7 +21,7 @@ import {
   getCwd,
   getLinkTarget,
   isSymlink,
-  isTrackedByGit,
+  isTrackedRealFile,
   toSlash,
 } from "../FsUtil.ts";
 import { type GitContext, getGitContext } from "../Git.ts";
@@ -432,7 +432,7 @@ async function processAgentMapping(
   const skipped: string[] = [];
 
   await forEachAgentPath(targetDir, agents, async (agentPath) => {
-    if (await isTrackedFile(agentPath, targetRoot)) {
+    if (await isTrackedRealFile(agentPath, targetRoot)) {
       skipped.push(relative(targetRoot, agentPath));
     } else {
       const linkTarget = getLinkTarget(agentPath, overlayPath);
@@ -494,11 +494,4 @@ async function checkMappingParentExists(
     }
   }
   return m;
-}
-
-/** Check if a file is tracked in git (exists as real file, not symlink, and tracked) */
-async function isTrackedFile(path: string, gitRoot: string): Promise<boolean> {
-  if (!(await fileExists(path))) return false;
-  if (await isSymlink(path)) return false;
-  return isTrackedByGit(path, gitRoot);
 }
