@@ -173,6 +173,33 @@ test.concurrent("add with --project creates project-specific command", () =>
     expect(cmdStat.isFile()).toBe(true);
   }));
 
+test.concurrent("add .codex/config.toml moves it to the overlay and symlinks it back", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+
+    const codexDir = join(ctx.targetDir, ".codex");
+    await mkdir(codexDir, { recursive: true });
+    await writeFile(
+      join(codexDir, "config.toml"),
+      'sandbox_mode = "workspace-write"\n',
+      "utf-8",
+    );
+
+    await clank(ctx, "add .codex/config.toml --project");
+
+    const overlayPath = overlay(ctx, "codex", "config.toml");
+    expect((await lstat(overlayPath)).isFile()).toBe(true);
+    expect(await readFile(overlayPath, "utf-8")).toBe(
+      'sandbox_mode = "workspace-write"\n',
+    );
+
+    const link = join(ctx.targetDir, ".codex", "config.toml");
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+    expect(await readFile(link, "utf-8")).toBe(
+      'sandbox_mode = "workspace-write"\n',
+    );
+  }));
+
 test.concurrent("unlink removes symlinks", () =>
   withTestEnv(async (ctx) => {
     await initAndLink(ctx);
@@ -1042,7 +1069,7 @@ test.concurrent("link does not create .vscode dir if missing", () =>
     expect(await lstat(vscodeDir).catch(() => null)).toBeNull();
   }));
 
-test.concurrent("add .claude/prompts/ creates symlinks in both .claude and .gemini", () =>
+test.concurrent("add .claude/prompts/ creates symlinks in .claude, .gemini, and .codex", () =>
   withTestEnv(async (ctx) => {
     await initAndLink(ctx);
 
@@ -1067,24 +1094,17 @@ test.concurrent("add .claude/prompts/ creates symlinks in both .claude and .gemi
     const content = await readFile(overlayPromptPath, "utf-8");
     expect(content).toBe("# Manifest prompt\n");
 
-    // Verify symlink created in .claude/prompts/
-    const claudeSymlink = join(ctx.targetDir, ".claude/prompts/manifest.md");
-    const claudeStat = await lstat(claudeSymlink);
-    expect(claudeStat.isSymbolicLink()).toBe(true);
-
-    // Verify symlink created in .gemini/prompts/
-    const geminiSymlink = join(ctx.targetDir, ".gemini/prompts/manifest.md");
-    const geminiStat = await lstat(geminiSymlink);
-    expect(geminiStat.isSymbolicLink()).toBe(true);
-
-    // Verify both symlinks point to the same overlay file
-    const claudeTarget = await readlink(claudeSymlink);
-    const geminiTarget = await readlink(geminiSymlink);
-    expect(claudeTarget.replaceAll("\\", "/")).toContain("prompts/manifest.md");
-    expect(geminiTarget.replaceAll("\\", "/")).toContain("prompts/manifest.md");
+    // Verify symlink created in each agent's prompts/ dir, all pointing at the overlay file
+    for (const agentDir of [".claude", ".gemini", ".codex"]) {
+      const symlink = join(ctx.targetDir, agentDir, "prompts/manifest.md");
+      expect((await lstat(symlink)).isSymbolicLink()).toBe(true);
+      expect((await readlink(symlink)).replaceAll("\\", "/")).toContain(
+        "prompts/manifest.md",
+      );
+    }
   }));
 
-test.concurrent("link recreates prompt symlinks in both agent directories", () =>
+test.concurrent("link recreates prompt symlinks in all agent directories", () =>
   withTestEnv(async (ctx) => {
     await initAndLink(ctx);
 
@@ -1098,20 +1118,18 @@ test.concurrent("link recreates prompt symlinks in both agent directories", () =
     );
     await clank(ctx, "add .claude/prompts/test.md");
 
-    const claudePrompt = join(ctx.targetDir, ".claude/prompts/test.md");
-    const geminiPrompt = join(ctx.targetDir, ".gemini/prompts/test.md");
+    const promptLinks = [".claude", ".gemini", ".codex"].map((agentDir) =>
+      join(ctx.targetDir, agentDir, "prompts/test.md"),
+    );
 
     // Verify symlinks exist
-    expect(await isSymlink(claudePrompt)).toBe(true);
-    expect(await isSymlink(geminiPrompt)).toBe(true);
+    for (const link of promptLinks) expect(await isSymlink(link)).toBe(true);
 
     // Unlink and verify removed
     await clank(ctx, "unlink");
-    expect(await pathExists(claudePrompt)).toBe(false);
-    expect(await pathExists(geminiPrompt)).toBe(false);
+    for (const link of promptLinks) expect(await pathExists(link)).toBe(false);
 
     // Re-link and verify recreated
     await clank(ctx, "link");
-    expect(await isSymlink(claudePrompt)).toBe(true);
-    expect(await isSymlink(geminiPrompt)).toBe(true);
+    for (const link of promptLinks) expect(await isSymlink(link)).toBe(true);
   }));

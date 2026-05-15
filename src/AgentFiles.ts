@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 /** Base agent directory names (without leading dot) */
-export const agentDirNames = ["claude", "gemini"];
+export const agentDirNames = ["claude", "gemini", "codex"];
 
 /** Agent directories as they appear in target (with leading dot) */
 export const managedAgentDirs = agentDirNames.map((d) => `.${d}`);

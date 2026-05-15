@@ -237,7 +237,7 @@ async function createAgentLinks(
   }
 }
 
-/** Create prompt symlinks in all agent directories (.claude/prompts/, .gemini/prompts/) */
+/** Create prompt symlinks in all agent directories (.claude/prompts/, .gemini/prompts/, .codex/prompts/) */
 async function createPromptLinks(
   promptsMappings: FileMapping[],
   targetRoot: string,

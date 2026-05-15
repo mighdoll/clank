@@ -1,4 +1,5 @@
 import { join, relative } from "node:path";
+import { managedAgentDirs } from "../../AgentFiles.ts";
 import { expandPath, loadConfig } from "../../Config.ts";
 import {
   getCwd,
@@ -244,7 +245,7 @@ function passesLinkFilter(
 }
 
 function isInDotAgentDir(relPath: string): boolean {
-  return isInDirectory(relPath, ".claude") || isInDirectory(relPath, ".gemini");
+  return managedAgentDirs.some((dir) => isInDirectory(relPath, dir));
 }
 
 /** Enforce a max segment count beneath the nearest `clank/` path component. */

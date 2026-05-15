@@ -59,7 +59,7 @@ export async function verifyManaged(
       };
     }
 
-    // Prompt files are fanned out to all agent directories (.claude/prompts/, .gemini/prompts/)
+    // Prompt files are fanned out to all agent directories (.claude/prompts/, .gemini/prompts/, .codex/prompts/)
     // Accept any agent's prompts dir as valid if the filename matches
     if (mapping.targetPath !== linkPath) {
       if (!isMatchingPromptPath(mapping.targetPath, linkPath)) {

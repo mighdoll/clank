@@ -479,6 +479,43 @@ test("overlayToTarget maps project claude/commands/ to .claude/commands/", () =>
   });
 });
 
+// Codex (.codex/) is a managed agent dir, like .claude/ and .gemini/
+
+test("normalizeAddPath preserves .codex/config.toml path", () => {
+  expect(normalizeAddPath(".codex/config.toml", cwd, gitRoot)).toBe(
+    join(targetRoot, ".codex", "config.toml"),
+  );
+});
+
+test("targetToOverlay encodes .codex/config.toml to codex/config.toml", () => {
+  const ctx = makeContext();
+  const result = targetToOverlay(
+    join(targetRoot, ".codex", "config.toml"),
+    "project",
+    ctx,
+  );
+  expect(result).toBe(
+    join(overlayRoot, "targets", "my-project", "codex", "config.toml"),
+  );
+});
+
+test("overlayToTarget maps project codex/config.toml to .codex/config.toml", () => {
+  const ctx = makeContext();
+  const result = overlayToTarget(
+    join(overlayRoot, "targets", "my-project", "codex", "config.toml"),
+    ctx,
+  );
+  expect(result).toEqual({
+    targetPath: join(targetRoot, ".codex", "config.toml"),
+    scope: "project",
+  });
+});
+
+test("isAgentFile does not treat .codex/config.toml as an agent file", () => {
+  expect(isAgentFile("config.toml")).toBe(false);
+  expect(isAgentFile(".codex/config.toml")).toBe(false);
+});
+
 // Prompts handling tests
 
 test("normalizeAddPath preserves .claude/prompts/ paths", () => {

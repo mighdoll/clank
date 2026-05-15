@@ -36,6 +36,8 @@ Clank Overlay Directory Structure
         │   ├── settings.json    # -> .claude/settings.json
         │   ├── commands/        # -> .claude/commands/
         │   └── agents/          # -> .claude/agents/
+        ├── codex/               # Codex specific
+        │   └── config.toml      # -> .codex/config.toml
         ├── <subdir>/clank/      # Subdirectory files (monorepo support)
         │   └── notes.md         # -> <subdir>/clank/notes.md
         └── worktrees/
@@ -51,6 +53,7 @@ Mapping Rules
   global/claude/commands/<file>       -> .claude/commands/<file>
   targets/<proj>/clank/<file>         -> clank/<file>
   targets/<proj>/claude/commands/     -> .claude/commands/
+  targets/<proj>/codex/config.toml    -> .codex/config.toml
   targets/<proj>/agents.md            -> CLAUDE.md, AGENTS.md, GEMINI.md
   targets/<proj>/<sub>/clank/<file>   -> <sub>/clank/<file>
   targets/<proj>/worktrees/<br>/clank -> clank/

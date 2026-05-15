@@ -292,14 +292,14 @@ function encodeTargetPath(relPath: string, overlayBase: string): string {
   if (basename(relPath) === "agents.md") {
     return join(overlayBase, relPath);
   }
-  // .claude/prompts/ and .gemini/prompts/ → prompts/ in overlay (agent-agnostic)
+  // <agentDir>/prompts/ (.claude/, .gemini/, .codex/) → prompts/ in overlay (agent-agnostic)
   for (const agentDir of managedAgentDirs) {
     const prefix = `${agentDir}/prompts/`;
     if (relPath.startsWith(prefix)) {
       return join(overlayBase, "prompts", relPath.slice(prefix.length));
     }
   }
-  // .claude/* and .gemini/* → claude/*, gemini/* in overlay (agent-specific)
+  // .claude/*, .gemini/*, .codex/* → claude/*, gemini/*, codex/* in overlay (agent-specific)
   for (const agentDir of managedAgentDirs) {
     if (relPath.startsWith(`${agentDir}/`)) {
       const subPath = relPath.slice(agentDir.length + 1);
@@ -314,12 +314,12 @@ function encodeTargetPath(relPath: string, overlayBase: string): string {
   return join(overlayBase, "clank", relPath);
 }
 
-/** Check if path starts with a managed agent dir (.claude/, .gemini/) */
+/** Check if path starts with a managed agent dir (.claude/, .gemini/, .codex/) */
 function startsWithAgentDir(path: string): boolean {
   return managedAgentDirs.some((dir) => path.startsWith(`${dir}/`));
 }
 
-/** Check if path is inside a managed agent dir (.claude/, .gemini/) */
+/** Check if path is inside a managed agent dir (.claude/, .gemini/, .codex/) */
 function isInsideAgentDir(relPath: string): boolean {
   return managedAgentDirs.some(
     (dir) => relPath.startsWith(`${dir}/`) || relPath === dir,
@@ -346,7 +346,7 @@ function decodeOverlayPath(
     };
   }
 
-  // claude/, gemini/ files → map to .claude/, .gemini/ in target
+  // claude/, gemini/, codex/ files → map to .claude/, .gemini/, .codex/ in target
   for (const agentDir of managedAgentDirs) {
     const overlayDir = agentDir.slice(1); // "claude" or "gemini"
     if (relPath.startsWith(`${overlayDir}/`)) {
