@@ -37,25 +37,31 @@ export function formatStatusCode(code: string): string {
   return "?";
 }
 
-/** Filter out lines matching ignore patterns */
+/** Build a predicate matching overlay paths against ignore patterns.
+ * Matches the full path, its basename, or any directory segment (so a
+ * pattern like ".obsidian" hides everything underneath it). */
+export function makeIgnoreFilter(
+  ignorePatterns: string[],
+): (path: string) => boolean {
+  if (ignorePatterns.length === 0) return () => false;
+
+  const isIgnored = picomatch(ignorePatterns);
+  return (filePath: string): boolean => {
+    const segments = filePath.split("/");
+    const pathBasename = segments.at(-1) ?? "";
+    if (isIgnored(filePath) || isIgnored(pathBasename)) return true;
+    return segments.some((segment) => isIgnored(segment));
+  };
+}
+
+/** Filter out porcelain status lines matching ignore patterns */
 function filterIgnoredLines(
   lines: string[],
   ignorePatterns: string[],
 ): string[] {
   if (ignorePatterns.length === 0) return lines;
-
-  const isIgnored = picomatch(ignorePatterns);
-  return lines.filter((line) => {
-    const filePath = line.slice(3); // Skip status code + space
-    const segments = filePath.split("/");
-    const pathBasename = segments.at(-1) ?? "";
-
-    // Check full path and basename
-    if (isIgnored(filePath) || isIgnored(pathBasename)) return false;
-
-    // Check each directory segment (for patterns like ".obsidian")
-    return !segments.some((segment) => isIgnored(segment));
-  });
+  const ignored = makeIgnoreFilter(ignorePatterns);
+  return lines.filter((line) => !ignored(line.slice(3))); // skip status + space
 }
 
 /** Parse overlay path into scope and path parts within that scope */

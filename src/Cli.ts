@@ -4,6 +4,7 @@ import { defaultOverlayDir, setConfigPath } from "./Config.ts";
 import { addCommand } from "./commands/Add.ts";
 import { checkCommand } from "./commands/Check.ts";
 import { commitCommand } from "./commands/Commit.ts";
+import { diffCommand } from "./commands/Diff.ts";
 import { filesCommand } from "./commands/Files.ts";
 import { initCommand } from "./commands/Init.ts";
 import { linkCommand } from "./commands/Link.ts";
@@ -131,12 +132,25 @@ function registerOverlayCommands(program: Command): void {
 
   registerRmCommand(program);
   registerMvCommand(program);
+  registerGitCommands(program);
+}
 
+function registerGitCommands(program: Command): void {
   program
     .command("commit")
     .description("Commit all changes in the overlay repository")
     .option("-m, --message <message>", "Commit message")
     .action(withErrorHandling(commitCommand));
+
+  program
+    .command("diff")
+    .description("Show uncommitted overlay changes for the current context")
+    .option("-g, --global", "Include only the global scope")
+    .option("-p, --project", "Include only this project's scope")
+    .option("-w, --worktree", "Include only this worktree's scope")
+    .option("-a, --all", "Diff the entire overlay (all projects)")
+    .option("--stat", "Show a diffstat summary instead of the full patch")
+    .action(withErrorHandling(diffCommand));
 }
 
 function registerUtilityCommands(program: Command): void {
