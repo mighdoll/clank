@@ -51,6 +51,24 @@ test.concurrent("mv renames regular file within same scope", () =>
     expect(target).toContain("renamed.md");
   }));
 
+test.concurrent("mv accepts a clank-rooted dest without doubling the prefix", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+    await clank(ctx, "add original.md");
+
+    // Dest written clank-rooted (e.g. archiving) must not become clank/clank/...
+    await clank(ctx, "mv clank/original.md clank/archive/original.md");
+
+    const newLink = join(ctx.targetDir, "clank/archive/original.md");
+    const newOverlay = projectOverlay(ctx, "clank/archive/original.md");
+    expect((await lstat(newLink)).isSymbolicLink()).toBe(true);
+    expect((await lstat(newOverlay)).isFile()).toBe(true);
+
+    // The doubled path must not exist
+    const doubled = join(ctx.targetDir, "clank/clank/archive/original.md");
+    await expect(lstat(doubled)).rejects.toThrow();
+  }));
+
 test.concurrent("mv renames prompt file and updates all agent symlinks", () =>
   withTestEnv(async (ctx) => {
     await initAndLink(ctx);

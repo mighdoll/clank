@@ -1,5 +1,5 @@
 import { rename, unlink } from "node:fs/promises";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { forEachAgentPath, managedAgentDirs } from "../AgentFiles.ts";
 import { expandPath, loadConfig, validateOverlayExists } from "../Config.ts";
 import {
@@ -144,11 +144,8 @@ async function renameFile(
     );
   }
 
-  // Build dest path (same directory as source)
-  const sourceDir = dirname(sourcePath);
-  const destPath = sourceDir === "." ? destName : join(sourceDir, destName);
-
   // Calculate overlay paths
+  const destPath = resolveRenameDest(sourcePath, destName);
   const normalizedSource = normalizeAddPath(sourcePath, cwd, gitRoot);
   const normalizedDest = normalizeAddPath(destPath, cwd, gitRoot);
   const sourceOverlay = targetToOverlay(
@@ -178,6 +175,17 @@ async function renameFile(
   }
 
   console.log(`Renamed ${sourcePath} → ${destName} (${currentScope} scope)`);
+}
+
+/** Resolve a rename destination before normalization. A bare name renames
+ *  within the source's directory; a clank-rooted or absolute dest is already
+ *  anchored, so it's returned as-is rather than re-anchored onto sourceDir
+ *  (which would double the prefix, e.g. clank/clank/archive). normalizeAddPath
+ *  strips a leading clank/ and re-roots either form. */
+function resolveRenameDest(sourcePath: string, destName: string): string {
+  if (destName.startsWith("clank/") || isAbsolute(destName)) return destName;
+  const sourceDir = dirname(sourcePath);
+  return sourceDir === "." ? destName : join(sourceDir, destName);
 }
 
 /** Recreate agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md) after moving */
