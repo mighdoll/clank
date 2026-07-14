@@ -65,8 +65,24 @@ interface SeparatedMappings {
   regularMappings: FileMapping[];
 }
 
+interface LinkOptions {
+  verbose?: boolean;
+}
+
+/** What a link run did, reported as a summary (or in full with --verbose) */
+interface LinkReport {
+  stale: string[];
+  linked: LinkedFile[];
+  agents: string[];
+  prompts: string[];
+  skipped: string[];
+}
+
 /** Link overlay repository to target directory */
-export async function linkCommand(targetDir?: string): Promise<void> {
+export async function linkCommand(
+  targetDir?: string,
+  options: LinkOptions = {},
+): Promise<void> {
   const gitContext = await getGitContext(targetDir || (await getCwd()));
   const targetRoot = gitContext.gitRoot;
   console.log(`Linking clank overlay to: ${targetRoot}\n`);
@@ -76,7 +92,7 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   const overlayRoot = expandPath(config.overlayRepo);
   await validateOverlayExists(overlayRoot);
 
-  await cleanStaleAndCheck(targetRoot, overlayRoot, gitContext);
+  const stale = await cleanStaleAndCheck(targetRoot, overlayRoot, gitContext);
 
   await ensureDir(join(overlayRoot, "targets", gitContext.projectName));
   await maybeInitWorktree(overlayRoot, gitContext);
@@ -86,10 +102,17 @@ export async function linkCommand(targetDir?: string): Promise<void> {
     await collectMappings(overlayRoot, gitContext, targetRoot, ignorePatterns);
 
   // Create symlinks
-  const linkedPaths = await createLinks(regularMappings, targetRoot);
-  logLinkedPaths(linkedPaths);
-  await createAgentLinks(agentsMappings, targetRoot, config.agents);
-  await createPromptLinks(promptsMappings, targetRoot);
+  const linked = await createLinks(regularMappings, targetRoot);
+  const agentLinks = await createAgentLinks(
+    agentsMappings,
+    targetRoot,
+    config.agents,
+  );
+  const prompts = await createPromptLinks(promptsMappings, targetRoot);
+  logReport(
+    { stale, linked, prompts, ...agentLinks },
+    options.verbose ?? false,
+  );
 
   await maybeConsolidateRules(overlayRoot, targetRoot, gitContext, config);
 
@@ -104,34 +127,115 @@ export async function linkCommand(targetDir?: string): Promise<void> {
   );
 }
 
+/** One reported category: a count, plus the paths behind it when listed */
+interface Section {
+  summary: string;
+  paths: string[];
+  listed: boolean;
+}
+
+/** Report what link did. Counts alone by default, full paths when verbose.
+ * Skipped files are always listed - they're rare and worth a look. */
+function logReport(report: LinkReport, verbose: boolean): void {
+  const blocks = reportSections(report, verbose)
+    .filter(({ paths }) => paths.length > 0)
+    .map(sectionLines);
+  if (blocks.length === 0) return;
+
+  // one-line counts stack together; listings get a blank line around them
+  const lines: string[] = [];
+  let prevListing = false;
+  for (const block of blocks) {
+    const listing = block.length > 1;
+    if (lines.length > 0 && (listing || prevListing)) lines.push("");
+    lines.push(...block);
+    prevListing = listing;
+  }
+  console.log(`\n${lines.join("\n")}`);
+}
+
+function reportSections(report: LinkReport, verbose: boolean): Section[] {
+  const { stale, linked, agents, prompts, skipped } = report;
+  const scopes = scopeCounts(linked);
+  return [
+    {
+      summary: `Cleaned ${plural(stale.length, "stale worktree symlink")}`,
+      paths: stale,
+      listed: verbose,
+    },
+    {
+      summary: `Linked ${plural(linked.length, "file")} ${scopes}`,
+      paths: linked.map(scopedPath),
+      listed: verbose,
+    },
+    {
+      summary: `Created ${plural(agents.length, "agent symlink")}`,
+      paths: agents,
+      listed: verbose,
+    },
+    {
+      summary: `Created ${plural(prompts.length, "prompt symlink")}`,
+      paths: prompts,
+      listed: verbose,
+    },
+    {
+      summary: `Skipped ${plural(skipped.length, "file")} already tracked in git`,
+      paths: skipped,
+      listed: true,
+    },
+  ];
+}
+
+function sectionLines({ summary, paths, listed }: Section): string[] {
+  if (!listed) return [summary];
+  return [`${summary}:`, ...paths.map((path) => `  ${path}`)];
+}
+
+function scopedPath({ path, scope }: LinkedFile): string {
+  return scope === "project" ? path : `${path} (${scope})`;
+}
+
+/** Per-scope tallies, e.g. "(11 global, 159 project, 3 worktree)" */
+function scopeCounts(linked: LinkedFile[]): string {
+  const scopes: Scope[] = ["global", "project", "worktree"];
+  const tallies = scopes
+    .map(
+      (scope) =>
+        [scope, linked.filter((f) => f.scope === scope).length] as const,
+    )
+    .filter(([, count]) => count > 0)
+    .map(([scope, count]) => `${count} ${scope}`);
+  return `(${tallies.join(", ")})`;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 function logGitContext(ctx: GitContext): void {
   const suffix = ctx.isWorktree ? " (worktree)" : "";
   console.log(`Project: ${ctx.projectName}`);
   console.log(`Branch: ${ctx.worktreeName}${suffix}`);
 }
 
-/** Clean stale worktree symlinks and check for problematic agent files */
+/** Clean stale worktree symlinks and check for problematic agent files.
+ * Returns the removed symlink paths. */
 async function cleanStaleAndCheck(
   targetRoot: string,
   overlayRoot: string,
   gitContext: GitContext,
-): Promise<void> {
+): Promise<string[]> {
   const staleRemoved = await cleanStaleWorktreeSymlinks(
     targetRoot,
     overlayRoot,
     gitContext,
   );
-  if (staleRemoved.length > 0) {
-    console.log(`\nCleaned ${staleRemoved.length} stale worktree symlink(s):`);
-    for (const path of staleRemoved) {
-      console.log(`  ${path}`);
-    }
-  }
 
   const classification = await classifyAgentFiles(targetRoot, overlayRoot);
   if (agentFileProblems(classification)) {
     throw new Error(formatAgentFileProblems(classification, await getCwd()));
   }
+  return staleRemoved;
 }
 
 async function maybeInitWorktree(
@@ -198,63 +302,33 @@ async function createLinks(
   }));
 }
 
-function logLinkedPaths(files: LinkedFile[]): void {
-  if (files.length === 0) return;
-  console.log(`\nLinked ${files.length} file(s):`);
-  for (const { path, scope } of files) {
-    const suffix = scope === "project" ? "" : ` (${scope})`;
-    console.log(`  ${path}${suffix}`);
-  }
-}
-
-/** Create agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md → agents.md) for all agents.md files */
+/** Create agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md → agents.md) for all agents.md files.
+ * Returns the created paths, plus any skipped because they're real files tracked in git. */
 async function createAgentLinks(
   agentsMappings: FileMapping[],
   targetRoot: string,
   agents: string[],
-): Promise<void> {
-  if (agentsMappings.length === 0) return;
-
+): Promise<{ agents: string[]; skipped: string[] }> {
   const results = await Promise.all(
     agentsMappings.map((m) => processAgentMapping(m, targetRoot, agents)),
   );
 
-  const created = results.flatMap((r) => r.created);
-  const skipped = results.flatMap((r) => r.skipped);
-
-  if (created.length) {
-    console.log(`\nCreated agent symlinks:`);
-    for (const path of created) {
-      console.log(`  ${path}`);
-    }
-  }
-
-  if (skipped.length) {
-    console.log(`\nSkipped (already tracked in git):`);
-    for (const path of skipped) {
-      console.log(`  ${path}`);
-    }
-  }
+  return {
+    agents: results.flatMap((r) => r.created),
+    skipped: results.flatMap((r) => r.skipped),
+  };
 }
 
 /** Create prompt symlinks in all agent directories (.claude/prompts/, .gemini/prompts/, .codex/prompts/) */
 async function createPromptLinks(
   promptsMappings: FileMapping[],
   targetRoot: string,
-): Promise<void> {
-  if (promptsMappings.length === 0) return;
-
+): Promise<string[]> {
   const results = await Promise.all(
     promptsMappings.map((m) => processPromptMapping(m, targetRoot)),
   );
 
-  const created = results.flatMap((r) => r.created);
-  if (created.length) {
-    console.log(`\nCreated prompt symlinks:`);
-    for (const path of created) {
-      console.log(`  ${path}`);
-    }
-  }
+  return results.flatMap((r) => r.created);
 }
 
 /** Consolidate rules into generated AGENTS.md/GEMINI.md if rules exist */

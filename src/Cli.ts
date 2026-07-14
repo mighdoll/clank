@@ -109,6 +109,7 @@ function registerOverlayCommands(program: Command): void {
     .command("link")
     .description("Link overlay repository to target directory")
     .argument("[target]", "Target directory (default: current directory)")
+    .option("-v, --verbose", "List every linked file instead of a summary")
     .action(withErrorHandling(linkCommand));
 
   program

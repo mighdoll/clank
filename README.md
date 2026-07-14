@@ -75,10 +75,12 @@ clank init ~/my-clankover       # Custom location
 ### `clank link [target]`
 
 Create symlinks from the overlay's agent files and notes into your project (current project by default).
+Reports a count of what it linked; pass `-v` to list every file.
 
 ```bash
 clank link              # Link current project to clank
 clank link ~/my-project # Link to specific project
+clank link -v           # List every linked file
 ```
 
 ### `clank add <file> [options]`
