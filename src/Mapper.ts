@@ -182,17 +182,12 @@ export function normalizeAddPath(
     return join(cwd, normalized);
   }
 
-  // Strip clank/ prefix if present at start
+  // Strip clank/ prefix if present at start; it's re-anchored below
   const filename = normalized.startsWith("clank/")
     ? normalized.slice("clank/".length)
     : normalized;
 
-  // Strip trailing /clank from cwd to avoid clank/clank nesting
-  // But don't strip if we're at the git root (project might be named "clank")
-  const inClankSubdir = toSlash(cwd).endsWith("/clank") && cwd !== gitRoot;
-  const normalizedCwd = inClankSubdir ? cwd.slice(0, -"/clank".length) : cwd;
-
-  return join(normalizedCwd, "clank", filename);
+  return clankDest(filename, cwd, gitRoot);
 }
 
 /** Check if a relative path contains a clank/ directory component */
@@ -324,6 +319,25 @@ function isInsideAgentDir(relPath: string): boolean {
   return managedAgentDirs.some(
     (dir) => relPath.startsWith(`${dir}/`) || relPath === dir,
   );
+}
+
+/** Anchor a plain file under the clank/ dir nearest the cwd */
+function clankDest(filename: string, cwd: string, gitRoot: string): string {
+  // Inside a clank/ dir already (clank/, clank/reports/, tools/clank/, ...) the
+  // file stays put; another clank/ would nest it (clank/reports/clank/foo.md).
+  // Measured from gitRoot, so a project named "clank" isn't mistaken for one.
+  if (isClankPath(`${toSlash(relative(gitRoot, cwd))}/`)) {
+    return join(cwd, filename);
+  }
+
+  // A path reaching above cwd anchors on its own directory:
+  // `clank add ../notes.md` from src/ lands in clank/notes.md, not src/notes.md
+  if (filename.startsWith("../")) {
+    const dest = join(cwd, filename);
+    return join(dirname(dest), "clank", basename(dest));
+  }
+
+  return join(cwd, "clank", filename);
 }
 
 /** Decode an overlay-relative path to target (shared by all scopes) */

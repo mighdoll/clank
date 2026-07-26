@@ -342,6 +342,32 @@ test.concurrent("add from subdirectory creates correct overlay structure", () =>
     expect(linkStat.isSymbolicLink()).toBe(true);
   }));
 
+test.concurrent("add from inside clank/ subdir keeps the file in place", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+
+    // A report written into clank/reports/, added from that directory
+    const reportsDir = join(ctx.targetDir, "clank/reports");
+    await mkdir(reportsDir, { recursive: true });
+    await writeFile(join(reportsDir, "findings.md"), "# Findings\n", "utf-8");
+    await clankExec(["add", "findings.md", "--config", ctx.configPath], {
+      cwd: reportsDir,
+    });
+
+    // Overlay keeps the reports/ subdir, with no extra clank/ level
+    const overlayPath = join(
+      ctx.overlayDir,
+      "targets/my-project/clank/reports/findings.md",
+    );
+    expect(await readFile(overlayPath, "utf-8")).toBe("# Findings\n");
+    expect(await pathExists(join(reportsDir, "clank"))).toBe(false);
+
+    // The original file is now a symlink, so it's no longer unadded
+    expect(await isSymlink(join(reportsDir, "findings.md"))).toBe(true);
+    const { stdout } = await clank(ctx, "status");
+    expect(stdout).not.toContain("unadded");
+  }));
+
 test.concurrent("link recreates subdirectory clank symlinks", () =>
   withTestEnv(async (ctx) => {
     await initAndLink(ctx);

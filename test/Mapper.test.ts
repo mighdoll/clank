@@ -128,6 +128,31 @@ test("normalizeAddPath avoids nesting when cwd is clank/", () => {
   );
 });
 
+test("normalizeAddPath avoids nesting when cwd is under clank/", () => {
+  const reportsCwd = join(targetRoot, "clank", "reports");
+  expect(normalizeAddPath("findings.md", reportsCwd, gitRoot)).toBe(
+    join(targetRoot, "clank", "reports", "findings.md"),
+  );
+  expect(normalizeAddPath("../notes.md", reportsCwd, gitRoot)).toBe(
+    join(targetRoot, "clank", "notes.md"),
+  );
+  // an explicit clank/ prefix refers to the enclosing clank/ dir
+  expect(normalizeAddPath("clank/archive/old.md", reportsCwd, gitRoot)).toBe(
+    join(targetRoot, "clank", "reports", "archive", "old.md"),
+  );
+  const nestedCwd = join(targetRoot, "tools", "clank", "reports");
+  expect(normalizeAddPath("findings.md", nestedCwd, gitRoot)).toBe(
+    join(targetRoot, "tools", "clank", "reports", "findings.md"),
+  );
+});
+
+test("normalizeAddPath anchors paths reaching above cwd in clank/", () => {
+  const subCwd = join(targetRoot, "src");
+  expect(normalizeAddPath("../notes.md", subCwd, gitRoot)).toBe(
+    join(targetRoot, "clank", "notes.md"),
+  );
+});
+
 test("normalizeAddPath handles project named 'clank'", () => {
   // When project itself is named "clank", don't strip the project root
   const clankGitRoot = resolve("/Users/lee/clank");
