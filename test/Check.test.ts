@@ -182,6 +182,42 @@ test("findUnaddedFiles ignores files matching overlay .gitignore", async () => {
   ]);
 });
 
+test("findUnaddedFiles ignores files matching config ignore patterns", async () => {
+  const targetClaude = join(ctx.targetDir, ".claude");
+  await mkdir(join(targetClaude, ".obsidian"), { recursive: true });
+  await writeFile(join(targetClaude, ".obsidian/workspace.json"), "{}");
+  await writeFile(join(targetClaude, "notes.bak"), "old");
+  await writeFile(join(targetClaude, "unadded.md"), "real content");
+
+  const result = await findUnaddedFiles(createMapperContext(ctx), [
+    ".obsidian",
+    "*.bak",
+  ]);
+  expect(result).toEqual([
+    {
+      targetPath: join(ctx.targetDir, ".claude/unadded.md"),
+      relativePath: ".claude/unadded.md",
+      kind: "unadded",
+    },
+  ]);
+});
+
+test("findUnaddedFiles skips .claude/worktrees", async () => {
+  const worktreeDir = join(ctx.targetDir, ".claude/worktrees/agent-1/.claude");
+  await mkdir(worktreeDir, { recursive: true });
+  await writeFile(join(worktreeDir, "settings.json"), "{}");
+  await writeFile(join(ctx.targetDir, ".claude/unadded.md"), "real content");
+
+  const result = await findUnaddedFiles(createMapperContext(ctx));
+  expect(result).toEqual([
+    {
+      targetPath: join(ctx.targetDir, ".claude/unadded.md"),
+      relativePath: ".claude/unadded.md",
+      kind: "unadded",
+    },
+  ]);
+});
+
 test("findUnaddedFiles detects symlinks pointing outside overlay", async () => {
   // Create a file outside the overlay
   const outsideFile = join(ctx.targetDir, "outside.md");

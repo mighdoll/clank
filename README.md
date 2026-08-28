@@ -288,7 +288,7 @@ export default {
   - `"always"`: always generate settings
   - `"never"`: never auto-generate (you can still run `clank vscode` manually)
 - `vscodeGitignore` - add `.vscode/settings.json` to `.git/info/exclude` (default: true)
-- `ignore` - glob patterns to skip in the overlay (e.g., `[".obsidian", "*.bak", ".DS_Store"]`).
+- `ignore` - glob patterns to skip in the overlay and when scanning for unadded files (e.g., `[".obsidian", "*.bak", ".DS_Store"]`). Matches the path, its basename, or any directory segment. `.claude/worktrees/` is always skipped.
 
 By default, clank creates symlinks for AGENTS.md, CLAUDE.md, and GEMINI.md.
 Run `clank unlink` then `clank link` to apply config changes.

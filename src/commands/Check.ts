@@ -17,7 +17,11 @@ import {
 import { type GitContext, getGitContext } from "../Git.ts";
 import { loadGitignore } from "../Gitignore.ts";
 import { type MapperContext, overlayProjectDir } from "../Mapper.ts";
-import { formatStatusLines, getOverlayStatus } from "../OverlayGit.ts";
+import {
+  formatStatusLines,
+  getOverlayStatus,
+  makeIgnoreFilter,
+} from "../OverlayGit.ts";
 import { type ManagedFileState, verifyManaged } from "../OverlayLinks.ts";
 
 export interface OrphanedPath {
@@ -42,6 +46,10 @@ export interface CheckOptions {
 /** Files that should remain local and not be tracked by clank */
 const localOnlyFiles = ["settings.local.json"];
 
+/** Directories (relative to target root) that are never clank-managed,
+ * e.g. Claude Code's agent worktrees, which are full checkouts */
+const localOnlyDirs = [".claude/worktrees"];
+
 /** Switch to a one-line summary when a category has at least this many files */
 const compactThreshold = 5;
 
@@ -63,21 +71,28 @@ export async function checkCommand(options: CheckOptions = {}): Promise<void> {
   }
 }
 
-/** Find files in clank-managed directories that aren't valid symlinks to the overlay */
+/** Find files in clank-managed directories that aren't valid symlinks to the overlay.
+ * Skips files matching the overlay .gitignore or the config `ignore` patterns. */
 export async function findUnaddedFiles(
   context: MapperContext,
+  ignorePatterns: string[] = [],
 ): Promise<UnaddedFile[]> {
   const { targetRoot, overlayRoot } = context;
   const unadded: UnaddedFile[] = [];
-  const isIgnored = await loadGitignore(overlayRoot);
+  const isGitIgnored = await loadGitignore(overlayRoot);
+  const isConfigIgnored = makeIgnoreFilter(ignorePatterns);
+  const skip = (relPath: string): boolean =>
+    localOnlyDirs.includes(relPath) || isConfigIgnored(relPath);
 
-  for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
+  for await (const { path, isDirectory } of walkDirectory(targetRoot, {
+    skip,
+  })) {
     if (isDirectory) continue;
 
     const relPath = toSlash(relative(targetRoot, path));
     if (!isInManagedDir(relPath)) continue;
     if (isLocalOnlyFile(relPath)) continue;
-    if (isIgnored(basename(relPath))) continue;
+    if (isGitIgnored(basename(relPath))) continue;
 
     const managed = await verifyManaged(path, context);
     if (managed.kind !== "valid") {
@@ -179,7 +194,7 @@ async function checkAllProblems(
   const { overlayRoot, targetRoot, gitContext } = ctx;
   let hasProblems = false;
 
-  const unadded = await findUnaddedFiles(ctx);
+  const unadded = await findUnaddedFiles(ctx, ignorePatterns);
   if (unadded.length > 0) {
     hasProblems = true;
     showUnaddedFiles(unadded, cwd, gitContext);

@@ -44,7 +44,7 @@ export type AddOptions = ScopeOptions & {
 interface AddContext {
   cwd: string;
   gitContext: GitContext;
-  config: { overlayRepo: string; agents: string[] };
+  config: { overlayRepo: string; agents: string[]; ignore?: string[] };
   overlayRoot: string;
 }
 
@@ -140,11 +140,11 @@ async function validateAddOptions(
 
 /** Interactive mode: add all unadded files with per-file scope selection */
 async function addAllInteractive(ctx: AddContext): Promise<void> {
-  const { cwd, gitContext, overlayRoot } = ctx;
+  const { cwd, gitContext, overlayRoot, config } = ctx;
   const { gitRoot: targetRoot } = gitContext;
   const context: MapperContext = { overlayRoot, targetRoot, gitContext };
 
-  const unadded = await findUnaddedFiles(context);
+  const unadded = await findUnaddedFiles(context, config.ignore ?? []);
   const regularFiles = unadded.filter((f) => f.kind === "unadded");
 
   // Also find untracked agent files outside managed dirs (e.g. packages/foo/CLAUDE.md)
