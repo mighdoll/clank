@@ -3,6 +3,7 @@ import {
   mkdir,
   readFile,
   readlink,
+  rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -17,6 +18,7 @@ import {
   type TestContext,
   tree,
   withTestEnv,
+  writeFileWithDir,
 } from "./Helpers.ts";
 
 /** Get path in overlay for current project */
@@ -534,6 +536,63 @@ test.concurrent("errors on tracked CLAUDE.md with conversion instructions", () =
 
     const content = await readFile(claudePath, "utf-8");
     expect(content).toBe("# My tracked CLAUDE.md\n");
+  }));
+
+/** Commit clank/report.md as a real file in the target repo */
+async function commitTrackedReport(ctx: TestContext): Promise<string> {
+  const reportPath = join(ctx.targetDir, "clank/report.md");
+  await writeFile(reportPath, "# Tracked report\n", "utf-8");
+  // -f: link excluded clank/ while it had no tracked files
+  await execa({ cwd: ctx.targetDir })`git add -f clank/report.md`;
+  await execa({ cwd: ctx.targetDir })`git commit -m ${"add report"}`;
+  return reportPath;
+}
+
+test.concurrent("link skips tracked real files in clank/", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+    const reportPath = await commitTrackedReport(ctx);
+    await writeFileWithDir(overlay(ctx, "clank/report.md"), "# Overlay\n");
+
+    const { stdout } = await clank(ctx, "link");
+
+    expect(stdout).toContain("Skipped 1 file already tracked in git");
+    expect(stdout).toContain("clank/report.md");
+    expect(await isSymlink(reportPath)).toBe(false);
+    expect(await readFile(reportPath, "utf-8")).toBe("# Tracked report\n");
+  }));
+
+test.concurrent("add skips tracked real files in clank/", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+    const reportPath = await commitTrackedReport(ctx);
+
+    const { stdout } = await clank(ctx, "add clank/report.md");
+
+    expect(stdout).toContain("Skipped (already tracked in git)");
+    expect(stdout).toContain("git rm --cached clank/report.md");
+    expect(await isSymlink(reportPath)).toBe(false);
+    expect(await pathExists(overlay(ctx, "clank/report.md"))).toBe(false);
+  }));
+
+test.concurrent("status reports clank symlinks at paths tracked in git", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+    const reportPath = await commitTrackedReport(ctx);
+
+    // Simulate a tracked file replaced by an overlay symlink (a typechange)
+    const overlayReport = overlay(ctx, "clank/report.md");
+    await writeFileWithDir(overlayReport, "# Tracked report\n");
+    await rm(reportPath);
+    await symlink(overlayReport, reportPath);
+
+    const { stdout } = await clank(ctx, "status");
+    expect(stdout).toContain("1 clank symlink(s) at paths tracked in git");
+    expect(stdout).toContain("git rm --cached clank/report.md");
+
+    await execa({ cwd: ctx.targetDir })`git rm --cached clank/report.md`;
+    const after = await clank(ctx, "status");
+    expect(after.stdout).toContain("No issues found");
   }));
 
 test.concurrent("errors on untracked CLAUDE.md with add instructions", () =>

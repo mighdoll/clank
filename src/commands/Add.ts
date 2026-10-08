@@ -218,6 +218,8 @@ async function addSingleFile(
 
   await checkScopeConflict(barePath, scope, context, cwd);
 
+  if (await skipTracked(normalizedPath, gitRoot, cwd)) return;
+
   if (await fileExists(overlayPath)) {
     if (!quiet)
       console.log(`${fileName} already exists in ${scopeLabel} overlay`);
@@ -243,6 +245,22 @@ async function addSingleFile(
     cwd,
     quiet,
   });
+}
+
+/** Leave real files tracked in git alone: replacing one with a symlink
+ * would show up as a typechange in the project repo. Returns true if skipped. */
+async function skipTracked(
+  normalizedPath: string,
+  gitRoot: string,
+  cwd: string,
+): Promise<boolean> {
+  if (!(await isTrackedRealFile(normalizedPath, gitRoot))) return false;
+  const rel = relative(cwd, normalizedPath);
+  console.log(
+    `Skipped (already tracked in git): ${rel}\n` +
+      `  Untrack it first, then add: git rm --cached ${rel} && clank add ${rel}`,
+  );
+  return true;
 }
 
 /** Prompt for scope and add a single file. Returns the choice or "error". */

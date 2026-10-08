@@ -98,21 +98,14 @@ export async function linkCommand(
   await maybeInitWorktree(overlayRoot, gitContext);
 
   const ignorePatterns = config.ignore ?? [];
-  const { agentsMappings, promptsMappings, regularMappings } =
-    await collectMappings(overlayRoot, gitContext, targetRoot, ignorePatterns);
-
-  // Create symlinks
-  const linked = await createLinks(regularMappings, targetRoot);
-  const agentLinks = await createAgentLinks(
-    agentsMappings,
+  const mappings = await collectMappings(
+    overlayRoot,
+    gitContext,
     targetRoot,
-    config.agents,
+    ignorePatterns,
   );
-  const prompts = await createPromptLinks(promptsMappings, targetRoot);
-  logReport(
-    { stale, linked, prompts, ...agentLinks },
-    options.verbose ?? false,
-  );
+  const created = await createAllLinks(mappings, targetRoot, config.agents);
+  logReport({ stale, ...created }, options.verbose ?? false);
 
   await maybeConsolidateRules(overlayRoot, targetRoot, gitContext, config);
 
@@ -125,6 +118,24 @@ export async function linkCommand(
     gitContext.projectName,
     ignorePatterns,
   );
+}
+
+/** Create regular, agent, and prompt symlinks */
+async function createAllLinks(
+  mappings: SeparatedMappings,
+  targetRoot: string,
+  agents: string[],
+): Promise<Omit<LinkReport, "stale">> {
+  const { agentsMappings, promptsMappings, regularMappings } = mappings;
+  const regular = await createLinks(regularMappings, targetRoot);
+  const agentLinks = await createAgentLinks(agentsMappings, targetRoot, agents);
+  const prompts = await createPromptLinks(promptsMappings, targetRoot);
+  return {
+    linked: regular.linked,
+    agents: agentLinks.agents,
+    prompts,
+    skipped: [...regular.skipped, ...agentLinks.skipped],
+  };
 }
 
 /** One reported category: a count, plus the paths behind it when listed */
@@ -278,28 +289,38 @@ async function collectMappings(
 
 /** Create symlinks, handling conflicts with scope suffixes.
  * Conflicts occur when the same filename exists at multiple scopes (global, project, worktree).
+ * Real files tracked in git are left alone (replacing them would show up as a
+ * typechange in the project repo) and returned as skipped.
  * Returns linked files with their scopes. */
 async function createLinks(
   mappings: FileMapping[],
   targetRoot: string,
-): Promise<LinkedFile[]> {
+): Promise<{ linked: LinkedFile[]; skipped: string[] }> {
   // Filter out subdirectory clank files where parent doesn't exist in target
   const validMappings = await filterValidMappings(mappings, targetRoot);
 
   const byTarget = Map.groupBy(validMappings, (m) => m.targetPath);
-  const links = [...byTarget].flatMap(([targetPath, files]) =>
+  const resolved = [...byTarget].flatMap(([targetPath, files]) =>
     resolveLinks(targetPath, files),
   );
+  const tracked = await Promise.all(
+    resolved.map(({ linkPath }) => isTrackedRealFile(linkPath, targetRoot)),
+  );
+  const links = resolved.filter((_, i) => !tracked[i]);
+  const skipped = resolved.filter((_, i) => tracked[i]);
 
   const linkPromises = links.map(({ overlayPath, linkPath }) =>
     createSymlink(getLinkTarget(linkPath, overlayPath), linkPath),
   );
   await Promise.all(linkPromises);
 
-  return links.map(({ linkPath, scope }) => ({
-    path: relative(targetRoot, linkPath),
-    scope,
-  }));
+  return {
+    linked: links.map(({ linkPath, scope }) => ({
+      path: relative(targetRoot, linkPath),
+      scope,
+    })),
+    skipped: skipped.map(({ linkPath }) => relative(targetRoot, linkPath)),
+  };
 }
 
 /** Create agent symlinks (CLAUDE.md, GEMINI.md, AGENTS.md → agents.md) for all agents.md files.

@@ -7,9 +7,11 @@ import {
   formatAgentFileProblems,
 } from "../ClassifyFiles.ts";
 import { expandPath, loadConfig } from "../Config.ts";
+import { execFileAsync } from "../Exec.ts";
 import {
   fileExists,
   getCwd,
+  isSymlink,
   relativePath,
   toSlash,
   walkDirectory,
@@ -101,6 +103,31 @@ export async function findUnaddedFiles(
   }
 
   return unadded;
+}
+
+/** Find clank symlinks at paths the target repo also tracks in git.
+ * Typically files committed before they were moved to the overlay;
+ * git sees each as a typechange until it's untracked. */
+export async function findTrackedLinks(
+  context: MapperContext,
+): Promise<string[]> {
+  const { targetRoot } = context;
+  const { stdout } = await execFileAsync("git", ["ls-files", "-z"], {
+    cwd: targetRoot,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const candidates = stdout
+    .split("\0")
+    .filter((relPath) => relPath && isInManagedDir(relPath));
+
+  const linked = await Promise.all(
+    candidates.map(async (relPath) => {
+      const path = join(targetRoot, relPath);
+      if (!(await isSymlink(path))) return false;
+      return (await verifyManaged(path, context)).kind === "valid";
+    }),
+  );
+  return candidates.filter((_, i) => linked[i]);
 }
 
 /** Find overlay paths whose target directories don't exist */
@@ -198,6 +225,12 @@ async function checkAllProblems(
   if (unadded.length > 0) {
     hasProblems = true;
     showUnaddedFiles(unadded, cwd, gitContext);
+  }
+
+  const trackedLinks = await findTrackedLinks(ctx);
+  if (trackedLinks.length > 0) {
+    hasProblems = true;
+    showTrackedLinks(trackedLinks, ctx, cwd);
   }
 
   const agentClassification = await classifyAgentFiles(
@@ -321,6 +354,25 @@ function showOrphanedPaths(
   console.log("─".repeat(50));
   console.log(generateAgentPrompt(orphans, targetRoot, overlayRoot));
   console.log("─".repeat(50));
+}
+
+function showTrackedLinks(
+  relPaths: string[],
+  ctx: MapperContext,
+  cwd: string,
+): void {
+  const paths = relPaths.map((p) => relativePath(cwd, join(ctx.targetRoot, p)));
+  console.log(
+    `Found ${paths.length} clank symlink(s) at paths tracked in git:\n`,
+  );
+  console.log("The overlay holds their content, but git still tracks them.");
+  console.log(
+    "Untrack them, then `clank link` to refresh .git/info/exclude:\n",
+  );
+  for (const path of paths) {
+    console.log(`  git rm --cached ${path}`);
+  }
+  console.log();
 }
 
 function showOutsideOverlay(
