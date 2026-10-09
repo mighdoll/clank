@@ -8,7 +8,7 @@ import {
   walkDirectory,
 } from "../../FsUtil.ts";
 import { getGitContext } from "../../Git.ts";
-import { isClankPath } from "../../Mapper.ts";
+import { branchesDirName, isClankPath, type Scope } from "../../Mapper.ts";
 import { isAgentFilePath } from "./Dedupe.ts";
 
 export interface FilesOptions {
@@ -36,8 +36,8 @@ export interface FilesOptions {
   /** Only include linked files from project scope (implies `linkedOnly`) */
   project?: boolean;
 
-  /** Only include linked files from worktree scope (implies `linkedOnly`) */
-  worktree?: boolean;
+  /** Only include linked files from branch scope (implies `linkedOnly`) */
+  branch?: boolean;
 }
 
 export type LinkState = LinkedToOverlay | NotLinkedToOverlay;
@@ -65,13 +65,13 @@ export interface NormalizedFilesOptions {
   dedupe: boolean;
   linkedOnly: boolean;
   unlinkedOnly: boolean;
-  scopeFilter: "global" | "project" | "worktree" | null;
+  scopeFilter: Scope | null;
 }
 
 interface LinkedToOverlay {
   kind: "linked";
   overlayPath: string;
-  scope: "global" | "project" | "worktree";
+  scope: Scope;
 }
 
 interface NotLinkedToOverlay {
@@ -109,7 +109,7 @@ export function normalizeFilesOptions(
   const scopeFilter = scopeFilterFromOptions({
     global: options?.global ?? false,
     project: options?.project ?? false,
-    worktree: options?.worktree ?? false,
+    branch: options?.branch ?? false,
   });
 
   return {
@@ -170,11 +170,11 @@ function parseDepth(raw: string): number {
 
 /** Resolve scope filter from CLI options (null = no filter, show all scopes) */
 function scopeFilterFromOptions(
-  options: Required<Pick<FilesOptions, "global" | "project" | "worktree">>,
-): "global" | "project" | "worktree" | null {
+  options: Required<Pick<FilesOptions, "global" | "project" | "branch">>,
+): Scope | null {
   if (options.global) return "global";
   if (options.project) return "project";
-  if (options.worktree) return "worktree";
+  if (options.branch) return "branch";
   return null;
 }
 
@@ -265,15 +265,15 @@ function inferScopeFromOverlay(
   overlayPath: string,
   overlayRoot: string,
   gitContext: Awaited<ReturnType<typeof getGitContext>>,
-): "global" | "project" | "worktree" | null {
+): Scope | null {
   const op = toSlash(overlayPath);
   const globalPrefix = `${toSlash(join(overlayRoot, "global"))}/`;
   if (op.startsWith(globalPrefix)) return "global";
 
-  const { projectName, worktreeName } = gitContext;
+  const { projectName, branchName } = gitContext;
   const projectBase = toSlash(join(overlayRoot, "targets", projectName));
-  const worktreePrefix = `${projectBase}/worktrees/${worktreeName}/`;
-  if (op.startsWith(worktreePrefix)) return "worktree";
+  const branchPrefix = `${projectBase}/${branchesDirName}/${branchName}/`;
+  if (op.startsWith(branchPrefix)) return "branch";
 
   if (op.startsWith(`${projectBase}/`)) return "project";
 

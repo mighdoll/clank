@@ -26,7 +26,7 @@ Clank Overlay Directory Structure
 │   ├── claude/                  # Claude Code specific
 │   │   ├── commands/            # -> .claude/commands/
 │   │   └── agents/              # -> .claude/agents/
-│   └── init/                    # Templates for new worktrees
+│   └── init/                    # Templates for new branch dirs
 │       └── notes.md
 └── targets/
     └── <project>/               # Per-project files
@@ -41,8 +41,8 @@ Clank Overlay Directory Structure
         │   └── config.toml      # -> .codex/config.toml
         ├── <subdir>/clank/      # Subdirectory files (monorepo support)
         │   └── notes.md         # -> <subdir>/clank/notes.md
-        └── worktrees/
-            └── <branch>/        # Worktree files (--worktree)
+        └── worktrees/           # Per-branch dirs (historical name)
+            └── <branch>/        # Branch files (--branch)
                 └── clank/
                     └── notes.md
 
@@ -63,7 +63,7 @@ Scopes
 ──────
   --global    Shared across all projects
   --project   Shared across all branches (default)
-  --worktree  This branch only
+  --branch    This branch only (--worktree is a deprecated alias)
 `.trim();
 export function createCLI(): Command {
   const program = new Command();
@@ -73,9 +73,10 @@ export function createCLI(): Command {
     .description("Keep your AI files in an overlay repository")
     .version(pkg.version)
     .option("-c, --config <path>", `Path to config file ${defaultOverlayMsg}`)
-    .hook("preAction", (thisCommand) => {
+    .hook("preAction", (thisCommand, actionCommand) => {
       const opts = thisCommand.optsWithGlobals();
       if (opts.config) setConfigPath(opts.config);
+      mapWorktreeAlias(actionCommand);
     });
 
   registerCommands(program);
@@ -112,7 +113,7 @@ function registerOverlayCommands(program: Command): void {
     .option("-v, --verbose", "List every linked file instead of a summary")
     .action(withErrorHandling(linkCommand));
 
-  program
+  const add = program
     .command("add")
     .description("Add file(s) to overlay and create symlinks")
     .argument(
@@ -121,9 +122,9 @@ function registerOverlayCommands(program: Command): void {
     )
     .option("-i, --interactive", "Interactively add all unadded files")
     .option("-g, --global", "Add to global location (all projects)")
-    .option("-p, --project", "Add to project location (default)")
-    .option("-w, --worktree", "Add to worktree location (this branch only)")
-    .action(withErrorHandling(addCommand));
+    .option("-p, --project", "Add to project location (default)");
+  addBranchOption(add, "Add to branch location (this branch only)");
+  add.action(withErrorHandling(addCommand));
 
   program
     .command("unlink")
@@ -143,12 +144,13 @@ function registerGitCommands(program: Command): void {
     .option("-m, --message <message>", "Commit message")
     .action(withErrorHandling(commitCommand));
 
-  program
+  const diff = program
     .command("diff")
     .description("Show uncommitted overlay changes for the current context")
     .option("-g, --global", "Include only the global scope")
-    .option("-p, --project", "Include only this project's scope")
-    .option("-w, --worktree", "Include only this worktree's scope")
+    .option("-p, --project", "Include only this project's scope");
+  addBranchOption(diff, "Include only this branch's scope");
+  diff
     .option("-a, --all", "Diff the entire overlay (all projects)")
     .option("--stat", "Show a diffstat summary instead of the full patch")
     .action(withErrorHandling(diffCommand));
@@ -190,6 +192,30 @@ function registerHelpCommands(program: Command): void {
     .action(() => console.log(structureHelp));
 }
 
+/** --branch and its hidden, deprecated --worktree alias */
+const branchOptionNames = ["branch", "worktree"];
+
+/** Add -b/--branch plus the hidden -w/--worktree alias (see mapWorktreeAlias) */
+function addBranchOption(
+  cmd: Command,
+  description: string,
+  conflicts: string[] = [],
+): void {
+  cmd.addOption(new Option("-b, --branch", description).conflicts(conflicts));
+  cmd.addOption(
+    new Option("-w, --worktree", "Deprecated alias for --branch")
+      .conflicts(conflicts)
+      .hideHelp(),
+  );
+}
+
+/** Treat the deprecated --worktree flag as --branch */
+function mapWorktreeAlias(cmd: Command): void {
+  if (!cmd.getOptionValue("worktree")) return;
+  cmd.setOptionValue("branch", true);
+  cmd.setOptionValue("worktree", undefined);
+}
+
 function withErrorHandling<T extends unknown[]>(
   fn: (...args: T) => Promise<void>,
 ): (...args: T) => Promise<void> {
@@ -204,15 +230,15 @@ function withErrorHandling<T extends unknown[]>(
 }
 
 function registerRmCommand(program: Command): void {
-  program
+  const rm = program
     .command("rm")
     .alias("remove")
     .description("Remove file(s) from overlay and target")
     .argument("<files...>", "File(s) to remove")
     .option("-g, --global", "Remove from global scope")
-    .option("-p, --project", "Remove from project scope")
-    .option("-w, --worktree", "Remove from worktree scope")
-    .action(withErrorHandling(rmCommand));
+    .option("-p, --project", "Remove from project scope");
+  addBranchOption(rm, "Remove from branch scope");
+  rm.action(withErrorHandling(rmCommand));
 }
 
 function registerMvCommand(program: Command): void {
@@ -225,21 +251,16 @@ function registerMvCommand(program: Command): void {
   cmd.addOption(
     new Option("-g, --global", "Move to global scope").conflicts([
       "project",
-      "worktree",
+      ...branchOptionNames,
     ]),
   );
   cmd.addOption(
     new Option("-p, --project", "Move to project scope").conflicts([
       "global",
-      "worktree",
+      ...branchOptionNames,
     ]),
   );
-  cmd.addOption(
-    new Option("-w, --worktree", "Move to worktree scope").conflicts([
-      "global",
-      "project",
-    ]),
-  );
+  addBranchOption(cmd, "Move to branch scope", ["global", "project"]);
   cmd.action(withErrorHandling(moveCommand));
 }
 
@@ -261,20 +282,18 @@ function registerFilesCommand(program: Command): void {
     new Option(
       "-g, --global",
       "Only include linked files from global scope",
-    ).conflicts(["project", "worktree"]),
+    ).conflicts(["project", ...branchOptionNames]),
   );
   files.addOption(
     new Option(
       "-p, --project",
       "Only include linked files from project scope",
-    ).conflicts(["global", "worktree"]),
+    ).conflicts(["global", ...branchOptionNames]),
   );
-  files.addOption(
-    new Option(
-      "-w, --worktree",
-      "Only include linked files from worktree scope",
-    ).conflicts(["global", "project"]),
-  );
+  addBranchOption(files, "Only include linked files from branch scope", [
+    "global",
+    "project",
+  ]);
   files.addOption(
     new Option(
       "--linked-only",

@@ -22,10 +22,10 @@ Clank stores your AI agent files (CLAUDE.md, commands, notes) in a separate git 
 
 - **Separate Tracking**: Agent files live in their own repository with independent version control.
 - **Multi-Agent Support**: Single source file, multiple symlinks (AGENTS.md, CLAUDE.md, GEMINI.md).
-- **Worktree-Aware**: Works seamlessly with git worktrees.
+- **Branch-Aware**: Per-branch files follow whatever branch is checked out, in the main repo or in git worktrees.
 - **Git Ignored**: Agent files are ignored in the main repo, tracked in the overlay repo.
 - **Rules Consolidation**: Use `.claude/rules/` for modular instructions; clank auto-generates AGENTS.md/GEMINI.md with consolidated content for cross-agent compatibility.
-- **Three Scopes**: Global (all projects), Project (all branches), Worktree (this branch only).
+- **Three Scopes**: Global (all projects), Project (all branches), Branch (this branch only).
 
 ## Installation
 
@@ -55,13 +55,15 @@ Agent files (CLAUDE.md, AGENTS.md, GEMINI.md) stay in place; other files go in `
 
 ### Scope Options
 
-Several commands (`add`, `rm`, `mv`) accept scope flags to specify where files are stored:
+Several commands (`add`, `rm`, `mv`, `diff`, `files`) accept scope flags to choose which scope to operate on:
 
 | Flag | Scope | Shared Across |
 |------|-------|---------------|
 | `--global`, `-g` | Global | All projects |
 | `--project`, `-p` | Project (default) | All branches in project |
-| `--worktree`, `-w` | Worktree | This branch only |
+| `--branch`, `-b` | Branch | This branch only |
+
+Branch scope works on any branch, whether or not you're in a git worktree. `--worktree` (`-w`) is still accepted as a deprecated alias for `--branch`.
 
 ### `clank init [overlay-path]`
 
@@ -94,7 +96,7 @@ Move a file to the overlay and replace it with a symlink. If the file doesn't ex
 ```bash
 clank add style.md                            # Project scope (default)
 clank add style.md --global                   # Global scope
-clank add notes.md --worktree                 # Worktree scope
+clank add notes.md --branch                   # Branch scope
 clank add .claude/commands/review.md --global # Global command
 clank add .claude/commands/build.md           # Project command (default)
 clank add CLAUDE.md                           # Creates agents.md + agent symlinks
@@ -175,7 +177,7 @@ By default, this includes `clank/` files and agent files (`AGENTS.md`, etc.), bu
 - `--no-dedupe` - Disable deduplication of agent files and prompts
 - `--linked-only` - Only include symlinks into the overlay
 - `--unlinked-only` - Only include non-overlay files/symlinks
-- `--global|--project|--worktree` - Only include linked files from that scope (implies `--linked-only`)
+- `--global|--project|--branch` - Only include linked files from that scope (implies `--linked-only`)
 
 **Examples:**
 ```bash
@@ -204,7 +206,7 @@ Move or rename file(s) in the overlay. With a [scope option](#scope-options), mo
 # Rename a file (keeps same scope)
 clank mv batch-dry-check.md batch-dry.md
 
-# Promote a worktree note to project scope
+# Promote a branch note to project scope
 clank mv clank/notes.md --project
 
 # Share a local command globally
@@ -259,13 +261,13 @@ Clank places symlinks in your project referencing the relevant files in the over
 
 ### Scope Suffixes
 
-If you add a file with the same name at different scopes (e.g., `notes.md` with both `--global` and `--worktree`), Clank distinguishes them with suffixes:
+If you add a file with the same name at different scopes (e.g., `notes.md` with both `--global` and `--branch`), Clank distinguishes them with suffixes:
 
 ```
 clank/
 ├── notes.md           # Global (no suffix)
 ├── notes-project.md   # Project
-└── notes-worktree.md  # Worktree
+└── notes-branch.md    # Branch
 ```
 
 ## Configuration
@@ -293,15 +295,16 @@ export default {
 By default, clank creates symlinks for AGENTS.md, CLAUDE.md, and GEMINI.md.
 Run `clank unlink` then `clank link` to apply config changes.
 
-## Worktree Templates
+## Branch Templates
 
-Customize `global/init/clank/` in your overlay to create starter notes and planning files for new worktrees. When you run `clank link` in a new worktree, these templates are copied into the worktree's overlay directory.
+Customize `global/init/clank/` in your overlay to create starter notes and planning files for new branches. The first time you run `clank link` on a branch (in the main repo or a git worktree), these templates are copied into that branch's overlay directory.
 
 Available placeholders:
 
-- `{{worktree_message}}` - "This is git worktree {branch} of project {project}."
+- `{{branch_message}}` - "This is branch {branch} of project {project}."
+- `{{worktree_message}}` - Same as `{{branch_message}}` (kept for existing templates)
 - `{{project_name}}` - Project name from git
-- `{{branch_name}}` - Current branch/worktree name
+- `{{branch_name}}` - Current branch name
 
 ## Rules Consolidation
 
@@ -312,8 +315,8 @@ Store rules in `claude/rules/` in your overlay, then run `clank link`. Consolida
 ## Design Principles
 
 1. **Everything is linked, nothing is copied** - Single source of truth in overlay
-2. **Git-aware** - Automatic project and worktree detection
-3. **Explicit scopes** - Three levels: global, project, worktree
+2. **Git-aware** - Automatic project and branch detection
+3. **Explicit scopes** - Three levels: global, project, branch
 4. **Flat target structure** - All notes show up together in `clank/`
 
 ## Reference
@@ -332,7 +335,7 @@ Store rules in `claude/rules/` in your overlay, then run `clank link`. Consolida
 │   │   └── agents/           # -> .claude/agents/
 │   ├── gemini/               # Gemini specific
 │   │   └── commands/         # -> .gemini/commands/
-│   └── init/                 # Templates for new worktrees
+│   └── init/                 # Templates for new branches
 │       └── clank/
 │           └── notes.md
 └── targets/
@@ -349,12 +352,12 @@ Store rules in `claude/rules/` in your overlay, then run `clank link`. Consolida
         │   └── rules/        # -> .claude/rules/ (also consolidated into AGENTS.md/GEMINI.md)
         ├── gemini/           # Gemini specific
         │   └── commands/     # -> .gemini/commands/
-        └── worktrees/
+        └── worktrees/        # Per-branch dirs (historical name, kept for compatibility)
             ├── main/
-            │   ├── clank/    # Worktree files (--worktree)
+            │   ├── clank/    # Branch files (--branch)
             │   │   └── notes.md
-            │   ├── prompts/  # Worktree-specific prompts
-            │   └── agents.md # Worktree agents file (optional)
+            │   ├── prompts/  # Branch-specific prompts
+            │   └── agents.md # Branch agents file (optional)
             └── feature-auth/
                 └── clank/
                     └── notes.md
@@ -363,7 +366,7 @@ Store rules in `claude/rules/` in your overlay, then run `clank link`. Consolida
 ## Requirements
 
 - Node.js >= 22.6.0
-- Git repository (for project/worktree detection)
+- Git repository (for project/branch detection)
 - macOS, Linux, or [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
 
 ## License

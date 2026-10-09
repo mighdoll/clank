@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import { expect, test } from "vitest";
 import {
+  addScopeSuffix,
   isAgentFile,
   type MapperContext,
   normalizeAddPath,
@@ -13,13 +14,13 @@ const overlayRoot = resolve("/overlay");
 const gitRoot = targetRoot;
 const cwd = targetRoot; // Default: running from project root
 
-const makeContext = (worktreeName = "main"): MapperContext => ({
+const makeContext = (branchName = "main"): MapperContext => ({
   overlayRoot: overlayRoot,
   targetRoot: targetRoot,
   gitContext: {
     projectName: "my-project",
-    worktreeName,
-    isWorktree: worktreeName !== "main",
+    branchName,
+    isWorktree: branchName !== "main",
     gitRoot: targetRoot,
   },
 });
@@ -194,9 +195,9 @@ test("normalizeAddPath preserves paths with /clank/ in the middle", () => {
   ).toBe(join(targetRoot, "tools", "packages", "viewer", "clank", "plan.md"));
 });
 
-// overlayToTarget - worktree files
+// overlayToTarget - branch files
 
-test("overlayToTarget maps worktree clank/ files to target/clank/", () => {
+test("overlayToTarget maps branch clank/ files to target/clank/", () => {
   const ctx = makeContext("feature-branch");
   const result = overlayToTarget(
     join(
@@ -212,11 +213,11 @@ test("overlayToTarget maps worktree clank/ files to target/clank/", () => {
   );
   expect(result).toEqual({
     targetPath: join(targetRoot, "clank", "notes.md"),
-    scope: "worktree",
+    scope: "branch",
   });
 });
 
-test("overlayToTarget worktree clank/ preserves subdirectory structure", () => {
+test("overlayToTarget branch clank/ preserves subdirectory structure", () => {
   const ctx = makeContext("feature-branch");
   const result = overlayToTarget(
     join(
@@ -233,11 +234,11 @@ test("overlayToTarget worktree clank/ preserves subdirectory structure", () => {
   );
   expect(result).toEqual({
     targetPath: join(targetRoot, "clank", "subdir", "notes.md"),
-    scope: "worktree",
+    scope: "branch",
   });
 });
 
-test("overlayToTarget maps worktree agents.md to natural path", () => {
+test("overlayToTarget maps branch agents.md to natural path", () => {
   const ctx = makeContext("feature-branch");
   const result = overlayToTarget(
     join(
@@ -253,11 +254,11 @@ test("overlayToTarget maps worktree agents.md to natural path", () => {
   );
   expect(result).toEqual({
     targetPath: join(targetRoot, "tools", "agents.md"),
-    scope: "worktree",
+    scope: "branch",
   });
 });
 
-test("overlayToTarget maps worktree nested agents.md to natural path", () => {
+test("overlayToTarget maps branch nested agents.md to natural path", () => {
   const ctx = makeContext("feature-branch");
   const result = overlayToTarget(
     join(
@@ -275,11 +276,11 @@ test("overlayToTarget maps worktree nested agents.md to natural path", () => {
   );
   expect(result).toEqual({
     targetPath: join(targetRoot, "tools", "packages", "wesl", "agents.md"),
-    scope: "worktree",
+    scope: "branch",
   });
 });
 
-test("overlayToTarget maps worktree claude/commands/ to .claude/commands/", () => {
+test("overlayToTarget maps branch claude/commands/ to .claude/commands/", () => {
   const ctx = makeContext("feature-branch");
   const result = overlayToTarget(
     join(
@@ -296,11 +297,11 @@ test("overlayToTarget maps worktree claude/commands/ to .claude/commands/", () =
   );
   expect(result).toEqual({
     targetPath: join(targetRoot, ".claude", "commands", "review.md"),
-    scope: "worktree",
+    scope: "branch",
   });
 });
 
-test("overlayToTarget maps worktree claude/agents/ to .claude/agents/", () => {
+test("overlayToTarget maps branch claude/agents/ to .claude/agents/", () => {
   const ctx = makeContext("feature-branch");
   const result = overlayToTarget(
     join(
@@ -317,11 +318,11 @@ test("overlayToTarget maps worktree claude/agents/ to .claude/agents/", () => {
   );
   expect(result).toEqual({
     targetPath: join(targetRoot, ".claude", "agents", "helper.md"),
-    scope: "worktree",
+    scope: "branch",
   });
 });
 
-test("overlayToTarget skips unrecognized worktree files", () => {
+test("overlayToTarget skips unrecognized branch files", () => {
   const ctx = makeContext("feature-branch");
   const result = overlayToTarget(
     join(
@@ -338,7 +339,7 @@ test("overlayToTarget skips unrecognized worktree files", () => {
   expect(result).toBeNull();
 });
 
-test("overlayToTarget skips other worktrees", () => {
+test("overlayToTarget skips other branches", () => {
   const ctx = makeContext("feature-branch");
   const result = overlayToTarget(
     join(
@@ -355,13 +356,13 @@ test("overlayToTarget skips other worktrees", () => {
   expect(result).toBeNull();
 });
 
-// targetToOverlay - worktree scope
+// targetToOverlay - branch scope
 
-test("targetToOverlay worktree encodes clank/ files preserving structure", () => {
+test("targetToOverlay branch encodes clank/ files preserving structure", () => {
   const ctx = makeContext("feature-branch");
   const result = targetToOverlay(
     join(targetRoot, "clank", "notes.md"),
-    "worktree",
+    "branch",
     ctx,
   );
   expect(result).toBe(
@@ -377,13 +378,9 @@ test("targetToOverlay worktree encodes clank/ files preserving structure", () =>
   );
 });
 
-test("targetToOverlay worktree encodes plain files with clank/ prefix", () => {
+test("targetToOverlay branch encodes plain files with clank/ prefix", () => {
   const ctx = makeContext("feature-branch");
-  const result = targetToOverlay(
-    join(targetRoot, "random.md"),
-    "worktree",
-    ctx,
-  );
+  const result = targetToOverlay(join(targetRoot, "random.md"), "branch", ctx);
   expect(result).toBe(
     join(
       overlayRoot,
@@ -397,11 +394,11 @@ test("targetToOverlay worktree encodes plain files with clank/ prefix", () => {
   );
 });
 
-test("targetToOverlay worktree encodes agents.md at natural path", () => {
+test("targetToOverlay branch encodes agents.md at natural path", () => {
   const ctx = makeContext("feature-branch");
   const result = targetToOverlay(
     join(targetRoot, "tools", "agents.md"),
-    "worktree",
+    "branch",
     ctx,
   );
   expect(result).toBe(
@@ -417,11 +414,11 @@ test("targetToOverlay worktree encodes agents.md at natural path", () => {
   );
 });
 
-test("targetToOverlay worktree encodes .claude/commands/ to claude/commands/", () => {
+test("targetToOverlay branch encodes .claude/commands/ to claude/commands/", () => {
   const ctx = makeContext("feature-branch");
   const result = targetToOverlay(
     join(targetRoot, ".claude", "commands", "review.md"),
-    "worktree",
+    "branch",
     ctx,
   );
   expect(result).toBe(
@@ -438,11 +435,11 @@ test("targetToOverlay worktree encodes .claude/commands/ to claude/commands/", (
   );
 });
 
-test("targetToOverlay worktree encodes .claude/agents/ to claude/agents/", () => {
+test("targetToOverlay branch encodes .claude/agents/ to claude/agents/", () => {
   const ctx = makeContext("feature-branch");
   const result = targetToOverlay(
     join(targetRoot, ".claude", "agents", "helper.md"),
-    "worktree",
+    "branch",
     ctx,
   );
   expect(result).toBe(
@@ -603,7 +600,7 @@ test("overlayToTarget maps global prompts/ to .claude/prompts/", () => {
   });
 });
 
-test("overlayToTarget maps worktree prompts/ to .claude/prompts/", () => {
+test("overlayToTarget maps branch prompts/ to .claude/prompts/", () => {
   const ctx = makeContext("feature-branch");
   const result = overlayToTarget(
     join(
@@ -619,6 +616,12 @@ test("overlayToTarget maps worktree prompts/ to .claude/prompts/", () => {
   );
   expect(result).toEqual({
     targetPath: join(targetRoot, ".claude", "prompts", "branch-specific.md"),
-    scope: "worktree",
+    scope: "branch",
   });
+});
+
+test("addScopeSuffix suffixes project and branch scopes, not global", () => {
+  expect(addScopeSuffix("notes.md", "global")).toBe("notes.md");
+  expect(addScopeSuffix("notes.md", "project")).toBe("notes-project.md");
+  expect(addScopeSuffix("notes.md", "branch")).toBe("notes-branch.md");
 });

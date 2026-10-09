@@ -157,13 +157,78 @@ test.concurrent("add plain file goes to clank/ (project scope)", () =>
     expect(linkStat.isSymbolicLink()).toBe(true);
   }));
 
-test.concurrent("add with --worktree fails in non-worktree context", () =>
+test.concurrent("add --branch works on a plain branch in the main repo", () =>
   withTestEnv(async (ctx) => {
     await initAndLink(ctx);
+    // slash in the branch name: relinking must not treat our own links as stale
+    await execa({ cwd: ctx.targetDir })`git checkout -b feat/foo`;
+    await clank(ctx, "link");
 
-    await expect(clank(ctx, "add notes.md --worktree")).rejects.toThrow(
-      "--worktree scope requires a git worktree",
+    await clank(ctx, "add todo.md --branch");
+    await clank(ctx, "link");
+
+    const overlayFile = overlay(ctx, "worktrees/feat/foo/clank/todo.md");
+    expect((await lstat(overlayFile)).isFile()).toBe(true);
+    const link = join(ctx.targetDir, "clank/todo.md");
+    expect(await isSymlink(link)).toBe(true);
+    expect(await readlink(link)).toBe(overlayFile);
+  }));
+
+test.concurrent("link after switching branches swaps branch-scoped links", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+    await clank(ctx, "add main-only.md --branch");
+
+    // templates (notes.md, plan.md) plus main-only.md all point at worktrees/main/
+    await execa({ cwd: ctx.targetDir })`git checkout -b feat/foo`;
+    const { stdout } = await clank(ctx, "link");
+    expect(stdout).toContain("Cleaned 3 stale branch symlinks");
+    expect(await pathExists(join(ctx.targetDir, "clank/main-only.md"))).toBe(
+      false,
     );
+    await clank(ctx, "add feat-only.md --branch");
+
+    await execa({ cwd: ctx.targetDir })`git checkout main`;
+    await clank(ctx, "link");
+    expect(await pathExists(join(ctx.targetDir, "clank/feat-only.md"))).toBe(
+      false,
+    );
+    const link = join(ctx.targetDir, "clank/main-only.md");
+    expect(await readlink(link)).toBe(
+      overlay(ctx, "worktrees/main/clank/main-only.md"),
+    );
+    expect(await readlink(join(ctx.targetDir, "clank/notes.md"))).toBe(
+      overlay(ctx, "worktrees/main/clank/notes.md"),
+    );
+  }));
+
+test.concurrent("add --worktree is still accepted as an alias for --branch", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+    await clank(ctx, "add alias.md --worktree");
+
+    const overlayFile = overlay(ctx, "worktrees/main/clank/alias.md");
+    expect((await lstat(overlayFile)).isFile()).toBe(true);
+    expect(await isSymlink(join(ctx.targetDir, "clank/alias.md"))).toBe(true);
+  }));
+
+test.concurrent("add -i with (B)ranch choice adds to branch scope outside a worktree", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+    await writeFileWithDir(join(ctx.targetDir, "clank/pick.md"), "# pick\n");
+
+    const args = ["add", "-i", "--config", ctx.configPath];
+    const { stdout } = await clankExec(args, {
+      cwd: ctx.targetDir,
+      input: "b",
+    });
+
+    expect(stdout).toContain("(B)ranch");
+    expect(stdout).toContain("Added 1 to branch");
+    expect(stdout).not.toContain("using project");
+    const overlayFile = overlay(ctx, "worktrees/main/clank/pick.md");
+    expect(await readFile(overlayFile, "utf-8")).toBe("# pick\n");
+    expect(await pathExists(overlay(ctx, "clank/pick.md"))).toBe(false);
   }));
 
 test.concurrent("add with --project creates project-specific command", () =>
@@ -219,7 +284,7 @@ test.concurrent("unlink removes symlinks", () =>
     await expect(lstat(join(ctx.targetDir, "clank/arch.md"))).rejects.toThrow();
   }));
 
-test.concurrent("add --worktree in git worktree creates branch-specific file", () =>
+test.concurrent("add --branch in git worktree creates branch-specific file", () =>
   withTestEnv(async (ctx) => {
     // Initialize overlay
     await clankExec(["init", ctx.overlayDir, "--config", ctx.configPath]);
@@ -244,10 +309,10 @@ test.concurrent("add --worktree in git worktree creates branch-specific file", (
     // Link in worktree
     await clankWorktree("link");
 
-    // Add worktree-specific file, project-scoped file, and worktree agent file
-    await clankWorktree("add foo.md --worktree");
+    // Add branch-specific file, project-scoped file, and branch agent file
+    await clankWorktree("add foo.md --branch");
     await clankWorktree("add proj.md");
-    await clankWorktree("add CLAUDE.md --worktree");
+    await clankWorktree("add CLAUDE.md --branch");
 
     // Validate overlay structure
     const overlayStructure = await tree(ctx.overlayDir);

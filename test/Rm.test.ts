@@ -156,9 +156,9 @@ test.concurrent("rm errors when file in multiple scopes without flag", () =>
 
     await clankWorktree("link");
 
-    // Add same file to both project and worktree scope
+    // Add same file to both project and branch scope
     await clankWorktree("add notes.md --project");
-    await clankWorktree("add notes.md --worktree");
+    await clankWorktree("add notes.md --branch");
 
     // Delete local symlinks to force scope search
     await fsRm(join(worktreeDir, "clank/notes.md"));
@@ -169,7 +169,7 @@ test.concurrent("rm errors when file in multiple scopes without flag", () =>
     );
 
     // With flag should work
-    await clankWorktree("rm notes.md --worktree");
+    await clankWorktree("rm notes.md --branch");
 
     // Clean up worktree
     await execa({

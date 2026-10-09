@@ -35,14 +35,11 @@ import {
   type TargetMapping,
 } from "../Mapper.ts";
 import {
-  cleanStaleWorktreeSymlinks,
+  cleanStaleBranchSymlinks,
   createPromptLinks as createPromptLinksShared,
   walkOverlayFiles,
 } from "../OverlayLinks.ts";
-import {
-  initializeWorktreeOverlay,
-  isWorktreeInitialized,
-} from "../Templates.ts";
+import { initializeBranchOverlay, isBranchInitialized } from "../Templates.ts";
 import { findOrphans } from "./Check.ts";
 import {
   checkVscodeTracking,
@@ -95,7 +92,7 @@ export async function linkCommand(
   const stale = await cleanStaleAndCheck(targetRoot, overlayRoot, gitContext);
 
   await ensureDir(join(overlayRoot, "targets", gitContext.projectName));
-  await maybeInitWorktree(overlayRoot, gitContext);
+  await maybeInitBranch(overlayRoot, gitContext);
 
   const ignorePatterns = config.ignore ?? [];
   const mappings = await collectMappings(
@@ -170,7 +167,7 @@ function reportSections(report: LinkReport, verbose: boolean): Section[] {
   const scopes = scopeCounts(linked);
   return [
     {
-      summary: `Cleaned ${plural(stale.length, "stale worktree symlink")}`,
+      summary: `Cleaned ${plural(stale.length, "stale branch symlink")}`,
       paths: stale,
       listed: verbose,
     },
@@ -206,9 +203,9 @@ function scopedPath({ path, scope }: LinkedFile): string {
   return scope === "project" ? path : `${path} (${scope})`;
 }
 
-/** Per-scope tallies, e.g. "(11 global, 159 project, 3 worktree)" */
+/** Per-scope tallies, e.g. "(11 global, 159 project, 3 branch)" */
 function scopeCounts(linked: LinkedFile[]): string {
-  const scopes: Scope[] = ["global", "project", "worktree"];
+  const scopes: Scope[] = ["global", "project", "branch"];
   const tallies = scopes
     .map(
       (scope) =>
@@ -226,17 +223,17 @@ function plural(count: number, noun: string): string {
 function logGitContext(ctx: GitContext): void {
   const suffix = ctx.isWorktree ? " (worktree)" : "";
   console.log(`Project: ${ctx.projectName}`);
-  console.log(`Branch: ${ctx.worktreeName}${suffix}`);
+  console.log(`Branch: ${ctx.branchName}${suffix}`);
 }
 
-/** Clean stale worktree symlinks and check for problematic agent files.
+/** Clean stale branch symlinks and check for problematic agent files.
  * Returns the removed symlink paths. */
 async function cleanStaleAndCheck(
   targetRoot: string,
   overlayRoot: string,
   gitContext: GitContext,
 ): Promise<string[]> {
-  const staleRemoved = await cleanStaleWorktreeSymlinks(
+  const staleRemoved = await cleanStaleBranchSymlinks(
     targetRoot,
     overlayRoot,
     gitContext,
@@ -249,16 +246,16 @@ async function cleanStaleAndCheck(
   return staleRemoved;
 }
 
-async function maybeInitWorktree(
+async function maybeInitBranch(
   overlayRoot: string,
   gitContext: GitContext,
 ): Promise<void> {
-  const initialized = await isWorktreeInitialized(overlayRoot, gitContext);
+  const initialized = await isBranchInitialized(overlayRoot, gitContext);
   if (!initialized) {
     console.log(
-      `Initializing worktree ${gitContext.worktreeName} from templates...`,
+      `Initializing branch ${gitContext.branchName} from templates...`,
     );
-    await initializeWorktreeOverlay(overlayRoot, gitContext);
+    await initializeBranchOverlay(overlayRoot, gitContext);
   }
 }
 
@@ -288,7 +285,7 @@ async function collectMappings(
 }
 
 /** Create symlinks, handling conflicts with scope suffixes.
- * Conflicts occur when the same filename exists at multiple scopes (global, project, worktree).
+ * Conflicts occur when the same filename exists at multiple scopes (global, project, branch).
  * Real files tracked in git are left alone (replacing them would show up as a
  * typechange in the project repo) and returned as skipped.
  * Returns linked files with their scopes. */
@@ -466,7 +463,7 @@ async function warnOrphans(
   }
 }
 
-/** Collect all file mappings from global, project, and worktree locations */
+/** Collect all file mappings from global, project, and branch locations */
 async function overlayMappings(
   overlayRoot: string,
   gitContext: GitContext,

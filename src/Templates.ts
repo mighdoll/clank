@@ -2,39 +2,41 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { ensureDir, fileExists, walkDirectory } from "./FsUtil.ts";
 import type { GitContext } from "./Git.ts";
-import { overlayWorktreeDir } from "./Mapper.ts";
+import { overlayBranchDir } from "./Mapper.ts";
 
 /**
- * clank stores worktree specific files in the overlay repo
+ * clank stores branch specific files in the overlay repo
  * intended for user notes and plans for each branch.
  */
 
 /** Template variables that can be used in template files */
 export interface TemplateVars {
+  branch_message: string;
+  /** legacy alias for branch_message, kept for existing user templates */
   worktree_message: string;
   project_name: string;
   branch_name: string;
   [key: string]: string;
 }
 
-/** Check if worktree has already been initialized */
-export async function isWorktreeInitialized(
+/** Check if the branch overlay dir has already been initialized */
+export async function isBranchInitialized(
   overlayRoot: string,
   gitContext: GitContext,
 ): Promise<boolean> {
-  return await fileExists(overlayWorktreeDir(overlayRoot, gitContext));
+  return await fileExists(overlayBranchDir(overlayRoot, gitContext));
 }
 
-/** Initialize worktree-specific files from templates (overlay/global/init/ ==> worktrees/{branch}/) */
-export async function initializeWorktreeOverlay(
+/** Initialize branch-specific files from templates (overlay/global/init/ ==> worktrees/{branch}/) */
+export async function initializeBranchOverlay(
   overlayRoot: string,
   gitContext: GitContext,
 ): Promise<void> {
   const templateDir = join(overlayRoot, "global/init");
-  const overlayWorktree = overlayWorktreeDir(overlayRoot, gitContext);
+  const overlayBranch = overlayBranchDir(overlayRoot, gitContext);
 
   if (!(await fileExists(templateDir))) {
-    await ensureDir(overlayWorktree);
+    await ensureDir(overlayBranch);
     return;
   }
 
@@ -44,20 +46,21 @@ export async function initializeWorktreeOverlay(
     if (isDirectory) continue;
 
     const relPath = relative(templateDir, path);
-    const targetPath = join(overlayWorktree, relPath);
+    const targetPath = join(overlayBranch, relPath);
     await createFromTemplate(path, targetPath, vars);
   }
 }
 
 /** Generate template variables from git context */
 export function generateTemplateVars(gitContext: GitContext): TemplateVars {
-  const { worktreeName, projectName } = gitContext;
-  const worktreeMessage = `This is git worktree ${worktreeName} of project ${projectName}.`;
+  const { branchName, projectName } = gitContext;
+  const branchMessage = `This is branch ${branchName} of project ${projectName}.`;
 
   return {
-    worktree_message: worktreeMessage,
+    branch_message: branchMessage,
+    worktree_message: branchMessage,
     project_name: projectName,
-    branch_name: worktreeName,
+    branch_name: branchName,
   };
 }
 

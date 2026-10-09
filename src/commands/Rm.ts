@@ -67,7 +67,7 @@ async function resolveScope(
   context: MapperContext,
 ): Promise<Scope | null> {
   // Explicit scope takes priority
-  if (options.global || options.project || options.worktree) {
+  if (options.global || options.project || options.branch) {
     return resolveScopeFromOptions(options);
   }
 
@@ -85,7 +85,7 @@ async function resolveScope(
     const scopeList = found.join(", ");
     throw new Error(
       `File exists in multiple scopes: ${scopeList}\n` +
-        `Specify --global, --project, or --worktree`,
+        `Specify --global, --project, or --branch`,
     );
   }
 
@@ -160,7 +160,7 @@ async function findInScopes(
 ): Promise<Scope[]> {
   const found: Scope[] = [];
 
-  for (const scope of ["worktree", "project", "global"] as const) {
+  for (const scope of ["branch", "project", "global"] as const) {
     const overlayPath = targetToOverlay(targetPath, scope, context);
     if (await fileExists(overlayPath)) {
       found.push(scope);

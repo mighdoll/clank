@@ -13,6 +13,7 @@ import {
 } from "./FsUtil.ts";
 import type { GitContext } from "./Git.ts";
 import {
+  branchesDirName,
   getPromptRelPath,
   type MapperContext,
   overlayToTarget,
@@ -133,17 +134,22 @@ export async function createPromptLinks(
   return created;
 }
 
-/** Find and remove symlinks pointing to wrong worktree in the overlay.
- *  Returns paths that were removed. */
-export async function cleanStaleWorktreeSymlinks(
+/** Find and remove symlinks pointing into another branch's overlay dir.
+ *  Returns paths that were removed.
+ *
+ *  Known gap: a branch whose name is a path prefix of another (`feat` vs
+ *  `feat/foo`) can't be told apart from a subdirectory of the current branch
+ *  dir, so links into `worktrees/feat/foo/` survive while on `feat`. Harmless:
+ *  the link step overwrites any that collide. */
+export async function cleanStaleBranchSymlinks(
   targetRoot: string,
   overlayRoot: string,
   gitContext: GitContext,
 ): Promise<string[]> {
   const removed: string[] = [];
-  const currentWorktree = gitContext.worktreeName;
-  const projectName = gitContext.projectName;
-  const worktreesPrefix = `${toSlash(overlayRoot)}/targets/${projectName}/worktrees/`;
+  const { projectName, branchName } = gitContext;
+  const branchesPrefix = `${toSlash(overlayRoot)}/targets/${projectName}/${branchesDirName}/`;
+  const currentPrefix = `${branchesPrefix}${branchName}/`;
 
   for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
     if (isDirectory) continue;
@@ -152,14 +158,12 @@ export async function cleanStaleWorktreeSymlinks(
     if (!isInManagedDir(relPath)) continue;
     if (!(await isSymlink(path))) continue;
 
+    // e.g. .../worktrees/feat/foo/clank/notes.md (branch names may contain '/')
     const target = toSlash(await resolveSymlinkTarget(path));
-    if (!target.startsWith(worktreesPrefix)) continue;
-
-    // Extract worktree name from path like .../worktrees/main/clank/notes.md
-    const afterPrefix = target.slice(worktreesPrefix.length);
-    const worktreeName = afterPrefix.split("/")[0];
-
-    if (worktreeName && worktreeName !== currentWorktree) {
+    if (
+      target.startsWith(branchesPrefix) &&
+      !target.startsWith(currentPrefix)
+    ) {
       await unlink(path);
       removed.push(relPath);
     }

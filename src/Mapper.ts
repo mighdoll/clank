@@ -3,14 +3,18 @@ import { managedAgentDirs } from "./AgentFiles.ts";
 import { toSlash } from "./FsUtil.ts";
 import type { GitContext } from "./Git.ts";
 
-/** overlay mappings can be cross project, per project, or per worktree */
-export type Scope = "global" | "project" | "worktree";
+/** overlay mappings can be cross project, per project, or per branch */
+export type Scope = "global" | "project" | "branch";
+
+/** Overlay subdirectory holding per-branch files (historically named worktrees/,
+ * kept on disk so existing overlays keep working) */
+export const branchesDirName = "worktrees";
 
 /** CLI options for scope selection */
 export interface ScopeOptions {
   global?: boolean;
   project?: boolean;
-  worktree?: boolean;
+  branch?: boolean;
 }
 
 /** Result of mapping an overlay path to a target path */
@@ -36,11 +40,11 @@ export function resolveScopeFromOptions(
 ): Scope {
   if (options.global) return "global";
   if (options.project) return "project";
-  if (options.worktree) return "worktree";
+  if (options.branch) return "branch";
 
   if (defaultScope === "require") {
     throw new Error(
-      "Must specify target scope: --global, --project, or --worktree",
+      "Must specify target scope: --global, --project, or --branch",
     );
   }
   return defaultScope;
@@ -54,13 +58,13 @@ export function overlayProjectDir(
   return join(overlayRoot, "targets", projectName);
 }
 
-/** Get overlay path for a worktree: overlay/targets/{project}/worktrees/{branch} */
-export function overlayWorktreeDir(
+/** Get overlay path for a branch: overlay/targets/{project}/worktrees/{branch} */
+export function overlayBranchDir(
   overlayRoot: string,
   gitContext: GitContext,
 ): string {
-  const { projectName, worktreeName } = gitContext;
-  return join(overlayRoot, "targets", projectName, "worktrees", worktreeName);
+  const { projectName, branchName } = gitContext;
+  return join(overlayRoot, "targets", projectName, branchesDirName, branchName);
 }
 
 /**
@@ -107,12 +111,12 @@ export function overlayToTarget(
  * Files go to overlay based on scope:
  * - --global: overlay/global/clank/
  * - --project: overlay/targets/{project}/clank/
- * - --worktree: overlay/targets/{project}/worktrees/{branch}/clank/
+ * - --branch: overlay/targets/{project}/worktrees/{branch}/clank/
  *
  * .claude/ files:
  * - --global: overlay/global/claude/{commands,agents}/
  * - --project: overlay/targets/{project}/claude/{commands,agents}/
- * - --worktree: overlay/targets/{project}/worktrees/{branch}/claude/{commands,agents}/
+ * - --branch: overlay/targets/{project}/worktrees/{branch}/claude/{commands,agents}/
  *
  * agents.md files stay at their natural path in the overlay
  */
@@ -127,8 +131,8 @@ export function targetToOverlay(
   let overlayBase: string;
   if (scope === "global") {
     overlayBase = join(overlayRoot, "global");
-  } else if (scope === "worktree") {
-    overlayBase = overlayWorktreeDir(overlayRoot, gitContext);
+  } else if (scope === "branch") {
+    overlayBase = overlayBranchDir(overlayRoot, gitContext);
   } else {
     overlayBase = overlayProjectDir(overlayRoot, gitContext.projectName);
   }
@@ -260,15 +264,15 @@ function mapProjectOverlay(
   const { targetRoot, gitContext } = context;
   const relPath = toSlash(relative(projectPrefix, overlayPath));
 
-  // Worktree-specific files
-  const worktreePrefix = `worktrees/${gitContext.worktreeName}`;
-  if (relPath.startsWith(`${worktreePrefix}/`)) {
-    const innerPath = toSlash(relative(worktreePrefix, relPath));
-    return decodeOverlayPath(innerPath, targetRoot, "worktree");
+  // Branch-specific files
+  const branchPrefix = `${branchesDirName}/${gitContext.branchName}`;
+  if (relPath.startsWith(`${branchPrefix}/`)) {
+    const innerPath = toSlash(relative(branchPrefix, relPath));
+    return decodeOverlayPath(innerPath, targetRoot, "branch");
   }
 
-  // Skip other worktrees
-  if (relPath.startsWith("worktrees/")) return null;
+  // Skip other branches
+  if (relPath.startsWith(`${branchesDirName}/`)) return null;
 
   // Project settings.json (project-only, before shared logic)
   if (relPath === "claude/settings.json") {

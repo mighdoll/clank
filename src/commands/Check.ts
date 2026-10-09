@@ -18,7 +18,11 @@ import {
 } from "../FsUtil.ts";
 import { type GitContext, getGitContext } from "../Git.ts";
 import { loadGitignore } from "../Gitignore.ts";
-import { type MapperContext, overlayProjectDir } from "../Mapper.ts";
+import {
+  branchesDirName,
+  type MapperContext,
+  overlayProjectDir,
+} from "../Mapper.ts";
 import {
   formatStatusLines,
   getOverlayStatus,
@@ -151,7 +155,7 @@ export async function findOrphans(
     !!isIgnored && (isIgnored(relPath) || isIgnored(basename(relPath)));
 
   for await (const { path, isDirectory } of walkDirectory(projectDir, {
-    skipDirs: [".git", "node_modules", "worktrees"],
+    skipDirs: [".git", "node_modules", branchesDirName],
     skip,
   })) {
     if (isDirectory) continue;
@@ -293,10 +297,8 @@ function showUnaddedFiles(
   cwd: string,
   gitContext: GitContext,
 ): void {
-  const { isWorktree, worktreeName, projectName } = gitContext;
-  const targetName = isWorktree
-    ? `${projectName}/${worktreeName}`
-    : projectName;
+  const { isWorktree, branchName, projectName } = gitContext;
+  const targetName = isWorktree ? `${projectName}/${branchName}` : projectName;
 
   const outsideOverlay = unadded.filter(
     (

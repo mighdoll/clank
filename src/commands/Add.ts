@@ -63,10 +63,10 @@ interface AgentLinkClassification {
   skipped: string[];
 }
 
-type InteractiveChoice = "project" | "worktree" | "global" | "skip" | "quit";
+type InteractiveChoice = "project" | "branch" | "global" | "skip" | "quit";
 type ScopeCounts = {
   project: number;
-  worktree: number;
+  branch: number;
   global: number;
   skip: number;
 };
@@ -85,7 +85,7 @@ interface CreateSymlinksParams {
 const scopeLabels: Record<Scope, string> = {
   global: "global",
   project: "project",
-  worktree: "worktree",
+  branch: "branch",
 };
 
 /** Add file(s) to overlay and create symlinks in target */
@@ -98,7 +98,7 @@ export async function addCommand(
   const config = await loadConfig();
   const overlayRoot = expandPath(config.overlayRepo);
 
-  await validateAddOptions(options, overlayRoot, gitContext);
+  await validateOverlayExists(overlayRoot);
 
   const ctx = { cwd, gitContext, config, overlayRoot };
 
@@ -118,23 +118,6 @@ export async function addCommand(
     } else {
       await addSingleFile(filePath, options, ctx);
     }
-  }
-}
-
-/** fail if we can't do an add with the given options */
-async function validateAddOptions(
-  options: AddOptions,
-  overlayRoot: string,
-  gitContext: GitContext,
-): Promise<void> {
-  await validateOverlayExists(overlayRoot);
-
-  if (options.worktree && !gitContext.isWorktree) {
-    throw new Error(
-      `--worktree scope requires a git worktree.\n` +
-        `You're on branch '${gitContext.worktreeName}' in the main repository.\n` +
-        `Use 'git worktree add' to create a worktree, or use --project scope instead.`,
-    );
   }
 }
 
@@ -170,7 +153,7 @@ async function addAllInteractive(ctx: AddContext): Promise<void> {
 
   console.log(`Found ${allPaths.length} unadded file(s):\n`);
 
-  const counts: ScopeCounts = { project: 0, worktree: 0, global: 0, skip: 0 };
+  const counts: ScopeCounts = { project: 0, branch: 0, global: 0, skip: 0 };
 
   for (let i = 0; i < allPaths.length; i++) {
     const relPath = relative(cwd, allPaths[i]);
@@ -272,10 +255,10 @@ async function promptAndAddFile(
 ): Promise<InteractiveChoice | "error"> {
   process.stdout.write(`\x1b[1m${relPath}\x1b[0m  [${index + 1}/${total}]\n`);
   process.stdout.write(
-    "      (P)roject  (W)orktree  (G)lobal  (S)kip  (Q)uit  [P]: ",
+    "      (P)roject  (B)ranch  (G)lobal  (S)kip  (Q)uit  [P]: ",
   );
 
-  const choice = await readScopeChoice(ctx.gitContext.isWorktree);
+  const choice = await readScopeChoice();
 
   if (choice === "quit" || choice === "skip") {
     if (choice === "quit") console.log("\nAborted.");
@@ -285,7 +268,7 @@ async function promptAndAddFile(
 
   const scopeOptions: AddOptions = {
     project: choice === "project",
-    worktree: choice === "worktree",
+    branch: choice === "branch",
     global: choice === "global",
     quiet: true,
   };
@@ -305,7 +288,7 @@ async function promptAndAddFile(
 function printSummary(counts: ScopeCounts): void {
   const parts: string[] = [];
   if (counts.project > 0) parts.push(`${counts.project} to project`);
-  if (counts.worktree > 0) parts.push(`${counts.worktree} to worktree`);
+  if (counts.branch > 0) parts.push(`${counts.branch} to branch`);
   if (counts.global > 0) parts.push(`${counts.global} to global`);
   if (counts.skip > 0) parts.push(`${counts.skip} skipped`);
 
@@ -397,9 +380,7 @@ async function createSymlinksForFile(params: CreateSymlinksParams) {
 }
 
 /** Read a single keypress for scope selection */
-async function readScopeChoice(
-  isWorktree: boolean,
-): Promise<InteractiveChoice> {
+async function readScopeChoice(): Promise<InteractiveChoice> {
   const key = await readSingleKey();
 
   switch (key.toLowerCase()) {
@@ -408,13 +389,9 @@ async function readScopeChoice(
     case "\n":
       console.log("project");
       return "project";
-    case "w":
-      if (!isWorktree) {
-        console.log("(not in worktree, using project)");
-        return "project";
-      }
-      console.log("worktree");
-      return "worktree";
+    case "b":
+      console.log("branch");
+      return "branch";
     case "g":
       console.log("global");
       return "global";

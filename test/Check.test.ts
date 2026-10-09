@@ -20,7 +20,7 @@ function createMapperContext(testCtx: TestContext): MapperContext {
     gitContext: {
       gitRoot: testCtx.targetDir,
       projectName: "my-project",
-      worktreeName: "main",
+      branchName: "main",
       isWorktree: false,
     },
   };

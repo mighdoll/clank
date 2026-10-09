@@ -113,7 +113,10 @@ export function clank(ctx: TestContext, command: string) {
 }
 
 /** Run clank binary with explicit args and options (for non-standard invocations) */
-export function clankExec(args: string[], options?: { cwd?: string }) {
+export function clankExec(
+  args: string[],
+  options?: { cwd?: string; input?: string },
+) {
   return execa("node", [...nodeArgs, ...args], options);
 }
 

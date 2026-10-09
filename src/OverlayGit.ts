@@ -1,6 +1,7 @@
 import { execa } from "execa";
 import picomatch from "picomatch";
 import { managedDirs } from "./AgentFiles.ts";
+import { branchesDirName } from "./Mapper.ts";
 
 /** Get git status of the overlay repository */
 export async function getOverlayStatus(
@@ -75,16 +76,13 @@ function parseScopedPath(filePath: string): {
   }
   if (segments[0] === "targets") {
     const project = segments[1];
-    if (segments[2] === "worktrees") {
+    if (segments[2] === branchesDirName) {
       // worktrees/<branch>/ - branch is max 2 segments (main, feat/foo)
-      const afterWorktrees = segments.slice(3);
-      const branchSegments = Math.min(
-        2,
-        Math.max(0, afterWorktrees.length - 1),
-      );
-      const branch = afterWorktrees.slice(0, branchSegments).join("/");
+      const afterBranches = segments.slice(3);
+      const branchSegments = Math.min(2, Math.max(0, afterBranches.length - 1));
+      const branch = afterBranches.slice(0, branchSegments).join("/");
       const scope = `${project}/${branch}`;
-      return { scope, pathParts: afterWorktrees.slice(branchSegments) };
+      return { scope, pathParts: afterBranches.slice(branchSegments) };
     }
     return { scope: project || "unknown", pathParts: segments.slice(2) };
   }

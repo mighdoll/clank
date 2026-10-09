@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { agentFiles, forEachAgentPath } from "./AgentFiles.ts";
 import { fileExists, isSymlink, walkDirectory } from "./FsUtil.ts";
 import type { GitContext } from "./Git.ts";
-import { overlayProjectDir, overlayWorktreeDir } from "./Mapper.ts";
+import { overlayBranchDir, overlayProjectDir } from "./Mapper.ts";
 
 /** Params for the consolidation entry point */
 export interface ConsolidateParams {
@@ -150,7 +150,7 @@ async function collectRulesFiles(
       overlayProjectDir(overlayRoot, gitContext.projectName),
       "claude/rules",
     ),
-    join(overlayWorktreeDir(overlayRoot, gitContext), "claude/rules"),
+    join(overlayBranchDir(overlayRoot, gitContext), "claude/rules"),
   ];
 
   const allFiles: RuleFile[] = [];

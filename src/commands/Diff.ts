@@ -4,8 +4,9 @@ import { expandPath, loadConfig, validateOverlayExists } from "../Config.ts";
 import { getCwd, toSlash } from "../FsUtil.ts";
 import { type GitContext, getGitContext } from "../Git.ts";
 import {
+  branchesDirName,
+  overlayBranchDir,
   overlayProjectDir,
-  overlayWorktreeDir,
   type Scope,
   type ScopeOptions,
 } from "../Mapper.ts";
@@ -23,7 +24,7 @@ type IgnoreFilter = (path: string) => boolean;
 /** Show uncommitted overlay changes for the current context.
  *
  * Default (no scope flag) diffs the three subtrees that feed the current
- * checkout — global + this project + this worktree — and hides other projects
+ * checkout — global + this project + this branch — and hides other projects
  * and other branches. Scope flags narrow that; `--all` shows the whole repo. */
 export async function diffCommand(options: DiffOptions = {}): Promise<void> {
   const config = await loadConfig();
@@ -64,8 +65,8 @@ function resolveScopes(options: DiffOptions): Scope[] {
   const scopes: Scope[] = [];
   if (options.global) scopes.push("global");
   if (options.project) scopes.push("project");
-  if (options.worktree) scopes.push("worktree");
-  return scopes.length > 0 ? scopes : ["global", "project", "worktree"];
+  if (options.branch) scopes.push("branch");
+  return scopes.length > 0 ? scopes : ["global", "project", "branch"];
 }
 
 interface DiffParams {
@@ -107,8 +108,8 @@ async function collectSections(
 
 /** Git pathspecs for one scope, relative to the overlay root.
  *
- * `project` excludes the worktrees subtree so each scope maps to exactly one
- * area; this exclude can't be combined with the worktree spec in a single git
+ * `project` excludes the per-branch (worktrees/) subtree so each scope maps to
+ * exactly one area; this exclude can't be combined with the branch spec in a single git
  * call (excludes win over positives), so scopes are diffed separately. */
 function scopePathspecs(
   scope: Scope,
@@ -116,21 +117,19 @@ function scopePathspecs(
   gitContext: GitContext,
 ): string[] {
   if (scope === "global") return ["global"];
-  if (scope === "worktree") {
-    return [
-      overlayRel(overlayRoot, overlayWorktreeDir(overlayRoot, gitContext)),
-    ];
+  if (scope === "branch") {
+    return [overlayRel(overlayRoot, overlayBranchDir(overlayRoot, gitContext))];
   }
   const projectRel = overlayRel(
     overlayRoot,
     overlayProjectDir(overlayRoot, gitContext.projectName),
   );
-  return [projectRel, `:!${projectRel}/worktrees`];
+  return [projectRel, `:!${projectRel}/${branchesDirName}`];
 }
 
 function scopeLabel(scope: Scope, gitContext: GitContext): string {
   if (scope === "global") return "global";
-  if (scope === "worktree") return `worktree (${gitContext.worktreeName})`;
+  if (scope === "branch") return `branch (${gitContext.branchName})`;
   return `project (${gitContext.projectName})`;
 }
 

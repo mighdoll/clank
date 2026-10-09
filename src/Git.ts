@@ -2,28 +2,29 @@ import { basename, isAbsolute, join } from "node:path";
 import { exec } from "./Exec.ts";
 import { resolveWindowsPath } from "./FsUtil.ts";
 
-/** Selected git project/worktree metadata */
+/** Selected git project/branch metadata */
 export interface GitContext {
   projectName: string;
-  worktreeName: string;
+  branchName: string;
+  /** true if cwd is a linked git worktree (not the main repository) */
   isWorktree: boolean;
   gitRoot: string;
 }
 
-/** @return metadata about the current git project and worktree */
+/** @return metadata about the current git project and branch */
 export async function getGitContext(
   cwd: string = process.cwd(),
 ): Promise<GitContext> {
-  const [projectName, worktreeName, isWorktree, gitRoot] = await Promise.all([
+  const [projectName, branchName, isWorktree, gitRoot] = await Promise.all([
     detectProjectName(cwd),
-    detectWorktreeName(cwd),
+    detectBranchName(cwd),
     isGitWorktree(cwd),
     detectGitRoot(cwd),
   ]);
 
   return {
     projectName,
-    worktreeName,
+    branchName,
     isWorktree,
     gitRoot,
   };
@@ -64,8 +65,8 @@ export async function detectProjectName(
   throw new Error("Not in a git repository");
 }
 
-/** Detect worktree/branch name */
-export async function detectWorktreeName(
+/** Detect branch name (or detached-<rev> for a detached HEAD) */
+export async function detectBranchName(
   cwd: string = process.cwd(),
 ): Promise<string> {
   const branch = await gitCommand("branch --show-current", cwd);
@@ -79,7 +80,7 @@ export async function detectWorktreeName(
     return `detached-${rev}`;
   }
 
-  throw new Error("Could not determine branch/worktree name");
+  throw new Error("Could not determine branch name");
 }
 
 /** Check if current directory is a git worktree (not the main repository) */

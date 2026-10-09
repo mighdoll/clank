@@ -37,7 +37,7 @@ export async function moveCommand(
   filePaths: string[],
   options: MoveOptions,
 ): Promise<void> {
-  const hasScope = options.global || options.project || options.worktree;
+  const hasScope = options.global || options.project || options.branch;
   const cwd = await getCwd();
   const gitContext = await getGitContext(cwd);
   const config = await loadConfig();
@@ -59,11 +59,11 @@ export async function moveCommand(
     await renameFile(filePaths[0], filePaths[1], context, cwd, config);
   } else if (filePaths.length === 1) {
     throw new Error(
-      "Must specify destination or scope flag (--global, --project, --worktree)",
+      "Must specify destination or scope flag (--global, --project, --branch)",
     );
   } else {
     throw new Error(
-      "Too many arguments without scope flag. Use --global, --project, or --worktree",
+      "Too many arguments without scope flag. Use --global, --project, or --branch",
     );
   }
 }

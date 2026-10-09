@@ -54,7 +54,7 @@ async function createDefaultTemplates(overlayPath: string): Promise<void> {
   const initClankDir = join(overlayPath, "global/init/clank");
   await ensureDir(initClankDir);
 
-  const planTemplate = "{{worktree_message}}\n\n# Goals\n";
+  const planTemplate = "{{branch_message}}\n\n# Goals\n";
   await writeFile(join(initClankDir, "plan.md"), planTemplate, "utf-8");
 
   await writeFile(join(initClankDir, "notes.md"), "# Notes\n\n", "utf-8");

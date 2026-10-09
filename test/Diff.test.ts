@@ -50,7 +50,7 @@ test.concurrent("diff shows a modified tracked overlay file", () =>
     expect(stdout).toContain("+# changed notes");
   }));
 
-test.concurrent("diff (contextual) excludes other projects and other worktrees", () =>
+test.concurrent("diff (contextual) excludes other projects and other branches", () =>
   withTestEnv(async (ctx) => {
     await initLinkCommit(ctx);
     await writeFileWithDir(
@@ -101,7 +101,7 @@ test.concurrent("diff --global shows only the global scope", () =>
     expect(stdout).not.toContain("pnote.md");
   }));
 
-test.concurrent("diff --project excludes the worktree subtree", () =>
+test.concurrent("diff --project excludes the branch subtree", () =>
   withTestEnv(async (ctx) => {
     await initLinkCommit(ctx);
     await writeFileWithDir(
@@ -117,6 +117,24 @@ test.concurrent("diff --project excludes the worktree subtree", () =>
 
     expect(stdout).toContain("pnote.md");
     expect(stdout).not.toContain("wnote.md");
+  }));
+
+test.concurrent("diff --branch shows only this branch's scope", () =>
+  withTestEnv(async (ctx) => {
+    await initLinkCommit(ctx);
+    await writeFileWithDir(
+      ov(ctx, "targets/my-project/clank/pnote.md"),
+      "proj\n",
+    );
+    await writeFileWithDir(
+      ov(ctx, "targets/my-project/worktrees/main/clank/bnote.md"),
+      "branch\n",
+    );
+
+    const { stdout } = await clank(ctx, "diff --branch");
+
+    expect(stdout).toContain("bnote.md");
+    expect(stdout).not.toContain("pnote.md");
   }));
 
 test.concurrent("diff reports No changes when the overlay is clean", () =>
