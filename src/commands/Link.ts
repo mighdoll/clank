@@ -316,7 +316,9 @@ async function createLinks(
       path: relative(targetRoot, linkPath),
       scope,
     })),
-    skipped: skipped.map(({ linkPath }) => relative(targetRoot, linkPath)),
+    skipped: skipped.map(({ linkPath }) =>
+      toSlash(relative(targetRoot, linkPath)),
+    ),
   };
 }
 
@@ -525,7 +527,7 @@ async function processAgentMapping(
 
   await forEachAgentPath(targetDir, agents, async (agentPath) => {
     if (await isTrackedRealFile(agentPath, targetRoot)) {
-      skipped.push(relative(targetRoot, agentPath));
+      skipped.push(toSlash(relative(targetRoot, agentPath)));
     } else {
       const linkTarget = getLinkTarget(agentPath, overlayPath);
       await createSymlink(linkTarget, agentPath);

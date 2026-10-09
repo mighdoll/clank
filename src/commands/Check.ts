@@ -363,7 +363,9 @@ function showTrackedLinks(
   ctx: MapperContext,
   cwd: string,
 ): void {
-  const paths = relPaths.map((p) => relativePath(cwd, join(ctx.targetRoot, p)));
+  const paths = relPaths.map((p) =>
+    toSlash(relativePath(cwd, join(ctx.targetRoot, p))),
+  );
   console.log(
     `Found ${paths.length} clank symlink(s) at paths tracked in git:\n`,
   );

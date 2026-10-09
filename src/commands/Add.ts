@@ -18,6 +18,7 @@ import {
   getLinkTarget,
   isSymlink,
   isTrackedRealFile,
+  toSlash,
   walkDirectory,
 } from "../FsUtil.ts";
 import { type GitContext, getGitContext } from "../Git.ts";
@@ -238,7 +239,7 @@ async function skipTracked(
   cwd: string,
 ): Promise<boolean> {
   if (!(await isTrackedRealFile(normalizedPath, gitRoot))) return false;
-  const rel = relative(cwd, normalizedPath);
+  const rel = toSlash(relative(cwd, normalizedPath));
   console.log(
     `Skipped (already tracked in git): ${rel}\n` +
       `  Untrack it first, then add: git rm --cached ${rel} && clank add ${rel}`,
