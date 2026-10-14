@@ -182,7 +182,7 @@ test.concurrent("link after switching branches swaps branch-scoped links", () =>
     // templates (notes.md, plan.md) plus main-only.md all point at worktrees/main/
     await execa({ cwd: ctx.targetDir })`git checkout -b feat/foo`;
     const { stdout } = await clank(ctx, "link");
-    expect(stdout).toContain("Cleaned 3 stale branch symlinks");
+    expect(stdout).toContain("Cleaned 3 stale symlinks");
     expect(await pathExists(join(ctx.targetDir, "clank/main-only.md"))).toBe(
       false,
     );
@@ -200,6 +200,37 @@ test.concurrent("link after switching branches swaps branch-scoped links", () =>
     expect(await readlink(join(ctx.targetDir, "clank/notes.md"))).toBe(
       overlay(ctx, "worktrees/main/clank/notes.md"),
     );
+  }));
+
+test.concurrent("check reports and link removes symlinks whose overlay file is gone", () =>
+  withTestEnv(async (ctx) => {
+    await initAndLink(ctx);
+    await clank(ctx, "add arch.md");
+    await writeFileWithDir(
+      join(ctx.targetDir, ".claude/prompts/review.md"),
+      "# Review\n",
+    );
+    await clank(ctx, "add .claude/prompts/review.md");
+
+    await rm(overlay(ctx, "clank/arch.md"));
+    await rm(overlay(ctx, "prompts/review.md"));
+    const brokenLinks = [
+      "clank/arch.md",
+      ".claude/prompts/review.md",
+      ".gemini/prompts/review.md",
+      ".codex/prompts/review.md",
+    ].map((p) => join(ctx.targetDir, p));
+
+    const { stdout: checkOut } = await clank(ctx, "check");
+    expect(checkOut).toContain("Found 4 broken symlink(s)");
+    expect(checkOut).not.toContain("No issues found");
+
+    const { stdout: linkOut } = await clank(ctx, "link");
+    expect(linkOut).toContain("Cleaned 4 stale symlinks");
+    for (const link of brokenLinks) expect(await pathExists(link)).toBe(false);
+
+    const { stdout: recheckOut } = await clank(ctx, "check");
+    expect(recheckOut).toContain("No issues found");
   }));
 
 test.concurrent("add --worktree is still accepted as an alias for --branch", () =>

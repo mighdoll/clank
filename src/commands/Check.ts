@@ -315,10 +315,12 @@ function showUnaddedFiles(
       expectedTarget: string;
     } => f.kind === "wrong-mapping",
   );
+  const broken = unadded.filter((f) => f.kind === "broken");
   const regularFiles = unadded.filter((f) => f.kind === "unadded");
 
   if (outsideOverlay.length > 0)
     showOutsideOverlay(outsideOverlay, cwd, targetName);
+  if (broken.length > 0) showBroken(broken, cwd, targetName);
   if (wrongMapping.length > 0) showWrongMapping(wrongMapping, cwd, targetName);
   if (regularFiles.length > 0) showUnadded(regularFiles, cwd, targetName);
 }
@@ -389,6 +391,28 @@ function showOutsideOverlay(
   console.log("Remove them manually, then run `clank link` to recreate:\n");
   for (const file of items) {
     console.log(`  rm ${relativePath(cwd, file.targetPath)}`);
+  }
+  console.log();
+}
+
+function showBroken(
+  items: UnaddedFile[],
+  cwd: string,
+  targetName: string,
+): void {
+  if (items.length >= compactThreshold) {
+    const names = items.map((f) => relativePath(cwd, f.targetPath));
+    console.log(
+      `Found ${items.length} broken symlink(s) in ${targetName} — run \`clank link\` to remove:`,
+    );
+    console.log(`  ${formatInlineList(names)}\n`);
+    return;
+  }
+  console.log(`Found ${items.length} broken symlink(s) in ${targetName}:\n`);
+  console.log("Their overlay files no longer exist.");
+  console.log("Run `clank link` to remove them.\n");
+  for (const file of items) {
+    console.log(`  ${relativePath(cwd, file.targetPath)}`);
   }
   console.log();
 }

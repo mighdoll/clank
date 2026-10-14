@@ -5,6 +5,7 @@ import { managedAgentDirs, targetManagedDirs } from "./AgentFiles.ts";
 import {
   createSymlink,
   ensureDir,
+  fileExists,
   getLinkTarget,
   isSymlink,
   resolveSymlinkTarget,
@@ -23,6 +24,7 @@ export type ManagedFileState =
   | { kind: "valid" }
   | { kind: "unadded" }
   | { kind: "outside-overlay"; currentTarget: string }
+  | { kind: "broken"; currentTarget: string }
   | {
       kind: "wrong-mapping";
       currentTarget: string;
@@ -48,6 +50,11 @@ export async function verifyManaged(
     // Check if symlink points to overlay at all
     if (!toSlash(absoluteTarget).startsWith(toSlash(overlayRoot))) {
       return { kind: "outside-overlay", currentTarget: absoluteTarget };
+    }
+
+    // Points into the overlay, but the overlay file was deleted or moved
+    if (!(await fileExists(absoluteTarget))) {
+      return { kind: "broken", currentTarget: absoluteTarget };
     }
 
     // Check if symlink points to correct overlay location
@@ -134,21 +141,23 @@ export async function createPromptLinks(
   return created;
 }
 
-/** Find and remove symlinks pointing into another branch's overlay dir.
+/** Find and remove stale clank symlinks: those pointing into another branch's
+ *  overlay dir, and those whose overlay file no longer exists.
  *  Returns paths that were removed.
  *
  *  Known gap: a branch whose name is a path prefix of another (`feat` vs
  *  `feat/foo`) can't be told apart from a subdirectory of the current branch
  *  dir, so links into `worktrees/feat/foo/` survive while on `feat`. Harmless:
  *  the link step overwrites any that collide. */
-export async function cleanStaleBranchSymlinks(
+export async function cleanStaleSymlinks(
   targetRoot: string,
   overlayRoot: string,
   gitContext: GitContext,
 ): Promise<string[]> {
   const removed: string[] = [];
   const { projectName, branchName } = gitContext;
-  const branchesPrefix = `${toSlash(overlayRoot)}/targets/${projectName}/${branchesDirName}/`;
+  const overlayPrefix = `${toSlash(overlayRoot)}/`;
+  const branchesPrefix = `${overlayPrefix}targets/${projectName}/${branchesDirName}/`;
   const currentPrefix = `${branchesPrefix}${branchName}/`;
 
   for await (const { path, isDirectory } of walkDirectory(targetRoot)) {
@@ -159,11 +168,13 @@ export async function cleanStaleBranchSymlinks(
     if (!(await isSymlink(path))) continue;
 
     // e.g. .../worktrees/feat/foo/clank/notes.md (branch names may contain '/')
-    const target = toSlash(await resolveSymlinkTarget(path));
-    if (
-      target.startsWith(branchesPrefix) &&
-      !target.startsWith(currentPrefix)
-    ) {
+    const target = await resolveSymlinkTarget(path);
+    const slashed = toSlash(target);
+    const otherBranch =
+      slashed.startsWith(branchesPrefix) && !slashed.startsWith(currentPrefix);
+    const missing =
+      slashed.startsWith(overlayPrefix) && !(await fileExists(target));
+    if (otherBranch || missing) {
       await unlink(path);
       removed.push(relPath);
     }

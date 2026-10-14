@@ -35,7 +35,7 @@ import {
   type TargetMapping,
 } from "../Mapper.ts";
 import {
-  cleanStaleBranchSymlinks,
+  cleanStaleSymlinks,
   createPromptLinks as createPromptLinksShared,
   walkOverlayFiles,
 } from "../OverlayLinks.ts";
@@ -167,7 +167,7 @@ function reportSections(report: LinkReport, verbose: boolean): Section[] {
   const scopes = scopeCounts(linked);
   return [
     {
-      summary: `Cleaned ${plural(stale.length, "stale branch symlink")}`,
+      summary: `Cleaned ${plural(stale.length, "stale symlink")}`,
       paths: stale,
       listed: verbose,
     },
@@ -226,14 +226,14 @@ function logGitContext(ctx: GitContext): void {
   console.log(`Branch: ${ctx.branchName}${suffix}`);
 }
 
-/** Clean stale branch symlinks and check for problematic agent files.
+/** Clean stale symlinks and check for problematic agent files.
  * Returns the removed symlink paths. */
 async function cleanStaleAndCheck(
   targetRoot: string,
   overlayRoot: string,
   gitContext: GitContext,
 ): Promise<string[]> {
-  const staleRemoved = await cleanStaleBranchSymlinks(
+  const staleRemoved = await cleanStaleSymlinks(
     targetRoot,
     overlayRoot,
     gitContext,

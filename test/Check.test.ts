@@ -239,6 +239,24 @@ test("findUnaddedFiles detects symlinks pointing outside overlay", async () => {
   ]);
 });
 
+test("findUnaddedFiles detects symlinks whose overlay file is missing", async () => {
+  // Symlink to an overlay file that was deleted
+  const deletedFile = join(ctx.overlayDir, "targets/my-project/clank/gone.md");
+  const targetClank = join(ctx.targetDir, "clank");
+  await mkdir(targetClank);
+  await symlink(deletedFile, join(targetClank, "gone.md"));
+
+  const result = await findUnaddedFiles(createMapperContext(ctx));
+  expect(result).toEqual([
+    {
+      targetPath: join(ctx.targetDir, "clank/gone.md"),
+      relativePath: "clank/gone.md",
+      kind: "broken",
+      currentTarget: deletedFile,
+    },
+  ]);
+});
+
 test("findUnaddedFiles detects symlinks pointing to wrong overlay location", async () => {
   // Create a file in the wrong overlay location (a different project's overlay)
   const wrongOverlayFile = join(
